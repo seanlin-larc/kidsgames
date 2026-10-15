@@ -41,6 +41,14 @@ a.back:hover{text-decoration:underline}
 .btn:active,.btn.down{border-color:var(--lo) var(--hi) var(--hi) var(--lo)}
 .btn:focus-visible{outline:2px dotted #000;outline-offset:1px}
 #face{width:44px;height:44px;font-size:26px}
+#modeBtn svg{width:26px;height:26px;display:block}
+@media (max-width:359px){            /* small phones: keep the top row inside the screen */
+  .top{gap:4px;padding:4px}
+  .btn{width:36px;height:36px;font-size:20px}
+  #face{width:40px;height:40px;font-size:24px}
+  #modeBtn svg{width:24px;height:24px}
+  .lcd{min-width:54px;font-size:24px}
+}
 .levelname{font-size:.8rem;text-align:center;margin:-2px 0 6px;color:#000}
 
 /* board */
@@ -119,6 +127,7 @@ tr.new td{background:rgba(255,215,0,.28);font-weight:700}
 <div class="game" id="game">
   <div class="top sunk">
     <div class="lcd" id="mines" aria-label="Mines left">000</div>
+    <button class="btn" id="modeBtn" type="button" aria-pressed="false"></button>
     <div class="spacer"></div>
     <button class="btn" id="face" type="button" aria-label="New game">🙂</button>
     <div class="spacer"></div>
@@ -133,9 +142,7 @@ tr.new td{background:rgba(255,215,0,.28);font-weight:700}
 
 <div class="menu" id="menu" role="menu" hidden></div>
 
-<p class="help">Tap to dig. Long-press to place a flag.<br>
-Mouse: click to dig, Shift + click (or right-click) to flag.<br>
-Tap a number to open its neighbours when its flags match the number.</p>
+<p class="help" id="help"></p>
 
 <!-- Statistics -->
 <dialog id="statsDlg" aria-labelledby="statsTitle">
@@ -188,7 +195,7 @@ const LEVELS = [
   { id: 'l20', label: 'Level 4', rows: 20, cols: 20, mines: 76  },
   { id: 'l24', label: 'Level 5', rows: 24, cols: 24, mines: 116 }
 ];
-const LONG_PRESS_MS = 400;   // hold time for a flag on touch screens
+const LONG_PRESS_MS = 300;   // hold time for a long tap on touch screens
 const MOVE_CANCEL_PX = 10;   // finger movement that cancels a long-press (scrolling)
 const TOP_N = 10;            // leaderboard size
 const STORE_KEY = 'ms-v2';   // all saved data for this game is under this key
@@ -362,9 +369,45 @@ function win() {
 
 /* =====================================================================
    INPUT
-   Touch: tap = dig (or open neighbours on a number), long-press = flag.
-   Mouse: click = dig, Shift+click or right-click = flag.
+   The mode button sets what the main action does:
+     Dig mode (shovel, default): tap / click = dig;  long tap / Shift+click / right-click = flag.
+     Flag mode (🚩):             tap / click = flag; long tap / Shift+click / right-click = dig.
+   On a revealed number, tap / click opens its neighbours (in both modes).
    ===================================================================== */
+const SHOVEL_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(45 12 12)">' +
+  '<rect x="9" y="1.5" width="6" height="2.6" rx="1.2" fill="#8b5a2b" stroke="#3b2410" stroke-width=".8"/>' +
+  '<rect x="11" y="3.6" width="2" height="10" fill="#a0522d" stroke="#3b2410" stroke-width=".8"/>' +
+  '<path d="M8 13h8v5c0 2.4-2 4.4-4 5.4c-2-1-4-3-4-5.4z" fill="#7d8a96" stroke="#222" stroke-width="1"/>' +
+  '</g></svg>';
+const FLAG_ICON = '🚩';          // same as the flag on the board
+
+let tapMode = 'dig';             // 'dig' | 'flag'. Starts as 'dig' each time the page opens.
+const modeBtn = $('modeBtn');
+
+function setMode(m) {
+  tapMode = m;
+  const flag = m === 'flag';
+  modeBtn.innerHTML = flag ? FLAG_ICON : SHOVEL_SVG;
+  modeBtn.classList.toggle('down', flag);
+  modeBtn.setAttribute('aria-pressed', String(flag));
+  modeBtn.setAttribute('aria-label', flag ? 'Flag mode: tap places a flag' : 'Dig mode: tap digs');
+  modeBtn.title = flag ? 'Flag mode (tap to switch to dig)' : 'Dig mode (tap to switch to flag)';
+  $('help').innerHTML = flag
+    ? '<b>Flag mode:</b> tap to place a flag. Long-press to dig.<br>' +
+      'Mouse: click to flag, Shift + click (or right-click) to dig.<br>' +
+      'Tap the 🚩 button to go back to dig mode.'
+    : 'Tap to dig. Long-press to place a flag.<br>' +
+      'Mouse: click to dig, Shift + click (or right-click) to flag.<br>' +
+      'Tap the shovel button to swap: then a tap places a flag.';
+  $('help').innerHTML += '<br>Tap a number to open its neighbours when its flags match the number.';
+}
+modeBtn.addEventListener('click', () => setMode(tapMode === 'dig' ? 'flag' : 'dig'));
+setMode('dig');
+
+// true when this action digs: the main action in dig mode, or the other action in flag mode
+function digs(secondary) { return (tapMode === 'dig') !== secondary; }
+
 let press = null;   // { cell, x, y, timer, long, type }
 
 function cellAt(e) { const el = e.target.closest && e.target.closest('.c'); return el ? cells[el.dataset.i] : null; }
@@ -375,7 +418,7 @@ boardEl.addEventListener('pointerdown', e => {
   if (!cell || !canPlay()) return;
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   press = { cell, x: e.clientX, y: e.clientY, long: false, type: e.pointerType, timer: null };
-  if (!cell.open && !cell.flag && !(e.pointerType === 'mouse' && e.shiftKey)) {
+  if (!cell.open && !cell.flag && digs(e.pointerType === 'mouse' && e.shiftKey)) {
     cell.el.classList.add('press');
     faceEl.textContent = '😮';
   }
@@ -385,7 +428,7 @@ boardEl.addEventListener('pointerdown', e => {
       press.long = true;
       clearPressLook();
       if (!press.cell.open) {
-        toggleFlag(press.cell);
+        act(press.cell, true);                        // long tap = the other action
         if (navigator.vibrate) navigator.vibrate(30);
       }
     }, LONG_PRESS_MS);
@@ -405,7 +448,7 @@ boardEl.addEventListener('pointerup', e => {
   clearTimeout(p.timer);
   clearPressLook();
   press = null;
-  if (p.long) return;                                 // long-press already placed the flag
+  if (p.long) return;                                 // long tap already did its action
   if (cellAt(e) !== p.cell) return;                   // released on a different cell
   act(p.cell, e.pointerType === 'mouse' && e.shiftKey);
 });
@@ -421,26 +464,24 @@ function clearPressLook() {
   if (canPlay()) faceEl.textContent = '🙂';
 }
 
-function act(cell, flagIntent) {
+// secondary = long tap, Shift + click, or right-click
+function act(cell, secondary) {
   if (!canPlay()) return;
-  if (flagIntent) {                                   // Shift + click
-    if (cell.open) chord(cell); else toggleFlag(cell);
-    return;
-  }
-  if (cell.flag) return;
   if (cell.open) { chord(cell); return; }
+  if (!digs(secondary)) { toggleFlag(cell); return; }
+  if (cell.flag) return;
   if (state === 'ready') startGame(cell);
   reveal(cell);
 }
 
-// Right-click flags (mouse). Stop the long-press menu on touch screens.
+// Right-click = the other action (mouse). Stop the long-press menu on touch screens.
 boardEl.addEventListener('contextmenu', e => {
   e.preventDefault();
   if (e.pointerType && e.pointerType !== 'mouse') return;
   if (press && press.type !== 'mouse') return;
   const cell = cellAt(e);
   if (!cell || !canPlay()) return;
-  if (cell.open) chord(cell); else toggleFlag(cell);
+  act(cell, true);
 });
 
 /* =====================================================================
