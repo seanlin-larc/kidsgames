@@ -31,7 +31,7 @@ kidsgames/
 
 | Game        | Prefix |
 |-------------|--------|
-| minesweeper | `ms-`  |
+| minesweeper | `ms-` (data in `ms-v2`) |
 
 ## Publish
 

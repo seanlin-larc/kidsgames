@@ -3,130 +3,270 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#008080">
 <title>Minesweeper · Kids Games</title>
 <style>
-:root{--bg:#f3f4f6;--panel:#ffffff;--text:#1f2937;--cell:#cbd5e1;--cell-hi:#d9e2ec;--open:#f8fafc;--line:#94a3b8;--mine:#ef4444;--accent:#2563eb;}
-@media (prefers-color-scheme: dark){:root{--bg:#111827;--panel:#1f2937;--text:#f3f4f6;--cell:#475569;--cell-hi:#5b6b80;--open:#0f172a;--line:#334155;}}
+:root{
+  --page:#008080; --face:#c0c0c0; --hi:#ffffff; --lo:#808080; --dark:#000000;
+  --open:#c0c0c0; --text:#000000; --boom:#ff0000; --accent:#000080;
+  --panel:#ffffff; --muted:#555555; --line:#d0d0d0;
+}
+@media (prefers-color-scheme: dark){
+  :root{--page:#0b3b3b; --panel:#1e1e1e; --muted:#b0b0b0; --line:#444444;}
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;padding:16px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-h1{margin:4px 0 12px;font-size:1.6rem}
-.back{align-self:flex-start;color:var(--accent);text-decoration:none;font-size:1rem;padding:4px 0}
-.back:hover{text-decoration:underline}
-.controls{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:10px}
-button,select{font:inherit;font-size:1rem;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
-button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
-.status{display:flex;gap:16px;align-items:center;justify-content:center;font-size:1.15rem;font-variant-numeric:tabular-nums;margin-bottom:10px;background:var(--panel);padding:6px 16px;border-radius:10px}
-#face{font-size:1.7rem;padding:0 8px;background:none;border:none}
-.wrap{max-width:100%;overflow:auto;padding-bottom:6px}
-#board{display:grid;gap:2px;background:var(--line);padding:2px;border-radius:6px;touch-action:manipulation;width:max-content}
-.c{width:var(--s);height:var(--s);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:calc(var(--s) * 0.55);background:var(--cell);border-radius:3px;cursor:pointer}
-@media (hover:hover){.c:not(.o):hover{background:var(--cell-hi)}}
-.c.o{background:var(--open);cursor:default}
-.c.boom{background:var(--mine)}
-.n1{color:#2563eb}.n2{color:#16a34a}.n3{color:#dc2626}.n4{color:#7c3aed}
-.n5{color:#b45309}.n6{color:#0891b2}.n7{color:#db2777}.n8{color:#6b7280}
-#msg{min-height:1.5em;margin-top:10px;font-size:1.2rem;font-weight:700;text-align:center}
-.help{margin-top:6px;font-size:.9rem;opacity:.75;text-align:center;max-width:440px;line-height:1.4}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--page);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  -webkit-tap-highlight-color:transparent;padding:12px 8px 24px}
+a.back{display:inline-block;color:#fff;text-decoration:none;font-size:.95rem;margin:0 0 8px 4px}
+a.back:hover{text-decoration:underline}
+
+/* ---------- classic raised window ---------- */
+.game{width:max-content;max-width:100%;margin:0 auto;background:var(--face);padding:6px;
+  border:3px solid;border-color:var(--hi) var(--lo) var(--lo) var(--hi)}
+.sunk{border:3px solid;border-color:var(--lo) var(--hi) var(--hi) var(--lo)}
+
+/* top row: mine counter | face | timer | stats | gear */
+.top{display:flex;align-items:center;gap:6px;padding:4px 6px;margin-bottom:6px}
+.lcd{background:#000;color:#ff2020;font:700 28px/1 "Courier New",ui-monospace,monospace;
+  letter-spacing:2px;padding:3px 4px;min-width:62px;text-align:center;
+  border:2px solid;border-color:var(--lo) var(--hi) var(--hi) var(--lo);font-variant-numeric:tabular-nums}
+.spacer{flex:1}
+.btn{width:40px;height:40px;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;
+  background:var(--face);border:3px solid;border-color:var(--hi) var(--lo) var(--lo) var(--hi);
+  cursor:pointer;padding:0;color:var(--text)}
+.btn:active,.btn.down{border-color:var(--lo) var(--hi) var(--hi) var(--lo)}
+.btn:focus-visible{outline:2px dotted #000;outline-offset:1px}
+#face{width:44px;height:44px;font-size:26px}
+.levelname{font-size:.8rem;text-align:center;margin:-2px 0 6px;color:#000}
+
+/* board */
+.scroll{overflow:auto;max-width:calc(100vw - 32px);-webkit-overflow-scrolling:touch}
+#board{display:grid;width:max-content;touch-action:manipulation}
+.c{width:var(--s);height:var(--s);display:flex;align-items:center;justify-content:center;
+  font:800 calc(var(--s) * .62)/1 "Arial Black",Arial,sans-serif;
+  background:var(--face);border:calc(var(--s) * .1) solid;
+  border-color:var(--hi) var(--lo) var(--lo) var(--hi);cursor:pointer}
+.c.press{border:none;border-left:1px solid var(--lo);border-top:1px solid var(--lo)}
+.c.o{border:none;border-left:1px solid var(--lo);border-top:1px solid var(--lo);background:var(--open);cursor:default}
+.c.boom{background:var(--boom)}
+.c .e{font-size:calc(var(--s) * .55);font-family:system-ui,sans-serif}
+.n1{color:#0000ff}.n2{color:#008000}.n3{color:#ff0000}.n4{color:#000080}
+.n5{color:#800000}.n6{color:#008080}.n7{color:#000000}.n8{color:#808080}
+
+.help{color:#fff;text-align:center;font-size:.85rem;opacity:.9;margin:10px auto 0;max-width:460px;line-height:1.45}
+
+/* level menu (gear) */
+.menu{position:absolute;z-index:20;background:var(--face);padding:4px;min-width:200px;
+  border:3px solid;border-color:var(--hi) var(--lo) var(--lo) var(--hi);box-shadow:3px 3px 0 rgba(0,0,0,.35)}
+.menu button{display:flex;gap:8px;width:100%;text-align:left;background:none;border:none;font:inherit;
+  font-size:1rem;padding:10px 10px;cursor:pointer;color:#000}
+.menu button:hover,.menu button:focus-visible{background:var(--accent);color:#fff;outline:none}
+.menu .tick{width:1em}
+[hidden]{display:none !important}
+
+/* dialogs */
+dialog{border:none;padding:0;background:var(--panel);color:var(--text);border-radius:10px;
+  width:min(560px,calc(100vw - 16px));max-height:calc(100vh - 32px);-webkit-user-select:text;user-select:text}
+@media (prefers-color-scheme: dark){dialog{color:#f0f0f0}}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.dlg-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
+  border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}
+.dlg-head h2{margin:0;font-size:1.2rem}
+.x{background:none;border:none;font-size:1.6rem;line-height:1;cursor:pointer;color:inherit;padding:4px 8px}
+.dlg-body{padding:12px 16px 18px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.tabs button{font:inherit;font-size:.9rem;padding:6px 10px;border-radius:999px;border:1px solid var(--line);
+  background:none;color:inherit;cursor:pointer}
+.tabs button.on{background:#000080;border-color:#000080;color:#fff}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.card{border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+.card b{display:block;font-size:1.25rem;font-variant-numeric:tabular-nums}
+.card span{font-size:.75rem;color:var(--muted)}
+@media (max-width:420px){.cards{grid-template-columns:repeat(2,1fr)}}
+h3{font-size:1rem;margin:18px 0 8px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);font-size:.95rem}
+th{font-size:.8rem;color:var(--muted);font-weight:600}
+td.r,th.r{text-align:right}
+tr.new td{background:rgba(255,215,0,.28);font-weight:700}
+.empty{color:var(--muted);font-size:.95rem;padding:6px 0}
+#hist{width:100%;height:auto;display:block}
+#hist text{font:11px system-ui,sans-serif;fill:currentColor}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.85rem;margin-top:6px;font-variant-numeric:tabular-nums}
+.legend i{display:inline-block;width:22px;height:0;border-top:2px solid;vertical-align:middle;margin-right:5px}
+.note{font-size:.8rem;color:var(--muted);margin-top:6px}
+.danger{margin-top:20px;font:inherit;font-size:.85rem;background:none;border:1px solid #b00020;color:#b00020;
+  border-radius:6px;padding:6px 10px;cursor:pointer}
+@media (prefers-color-scheme: dark){.danger{color:#ff8a80;border-color:#ff8a80}}
+
+/* name entry */
+#nameDlg .dlg-body p{margin:0 0 12px;font-size:1.05rem}
+#nameInput{width:100%;font:inherit;font-size:1.2rem;padding:10px;border-radius:8px;border:2px solid var(--line);
+  background:var(--panel);color:inherit}
+.row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.row button{font:inherit;font-size:1rem;padding:10px 16px;border-radius:8px;border:1px solid var(--line);
+  background:none;color:inherit;cursor:pointer}
+.row button.primary{background:#000080;border-color:#000080;color:#fff}
 </style>
 </head>
 <body>
 <a class="back" href="../">← All games</a>
-<h1>💣 Minesweeper</h1>
 
-<div class="controls">
-  <select id="level" aria-label="Difficulty">
-    <option value="8,8,8">Easy (8×8, 8 mines)</option>
-    <option value="9,9,10">Beginner (9×9, 10 mines)</option>
-    <option value="16,16,40">Medium (16×16, 40 mines)</option>
-    <option value="16,30,99">Hard (16×30, 99 mines)</option>
-  </select>
-  <button id="flagBtn" type="button">🚩 Flag mode: off</button>
+<div class="game" id="game">
+  <div class="top sunk">
+    <div class="lcd" id="mines" aria-label="Mines left">000</div>
+    <div class="spacer"></div>
+    <button class="btn" id="face" type="button" aria-label="New game">🙂</button>
+    <div class="spacer"></div>
+    <div class="lcd" id="time" aria-label="Time">000</div>
+    <button class="btn" id="statsBtn" type="button" aria-label="Statistics" title="Statistics">📊</button>
+    <button class="btn" id="gearBtn" type="button" aria-label="Change level" title="Change level"
+            aria-haspopup="menu" aria-expanded="false">⚙️</button>
+  </div>
+  <div class="levelname" id="levelName"></div>
+  <div class="scroll sunk" id="scroll"><div id="board" role="grid" aria-label="Minefield"></div></div>
 </div>
 
-<div class="status">
-  <span id="mines">💣 0</span>
-  <button id="face" type="button" aria-label="New game">🙂</button>
-  <span id="time">⏱ 0</span>
-</div>
+<div class="menu" id="menu" role="menu" hidden></div>
 
-<div class="wrap"><div id="board"></div></div>
-<div id="msg"></div>
-<div class="help" id="best"></div>
-<div class="help">Tap to dig. Long-press (or right-click) to place a flag. Tap a number to open its neighbours when the flags around it match the number.</div>
+<p class="help">Tap to dig. Long-press to place a flag.<br>
+Mouse: click to dig, Shift + click (or right-click) to flag.<br>
+Tap a number to open its neighbours when its flags match the number.</p>
+
+<!-- Statistics -->
+<dialog id="statsDlg" aria-labelledby="statsTitle">
+  <div class="dlg-head"><h2 id="statsTitle">Statistics</h2>
+    <button class="x" type="button" data-close aria-label="Close">×</button></div>
+  <div class="dlg-body">
+    <div class="tabs" id="statTabs"></div>
+    <div class="cards">
+      <div class="card"><b id="sPlayed">0</b><span>Games played</span></div>
+      <div class="card"><b id="sWon">0</b><span>Games won</span></div>
+      <div class="card"><b id="sRate">–</b><span>Success rate</span></div>
+      <div class="card"><b id="sBest">–</b><span>Best time</span></div>
+    </div>
+    <h3>Top 10 fastest</h3>
+    <div id="board10"></div>
+    <h3>Finish times (games won)</h3>
+    <div id="histWrap"></div>
+    <button class="danger" id="resetBtn" type="button">Reset statistics for this level</button>
+  </div>
+</dialog>
+
+<!-- Name entry for a top-10 time -->
+<dialog id="nameDlg" aria-labelledby="nameTitle">
+  <form method="dialog" id="nameForm">
+    <div class="dlg-head"><h2 id="nameTitle">🏆 New top-10 time!</h2></div>
+    <div class="dlg-body">
+      <p id="nameMsg"></p>
+      <label for="nameInput" style="font-size:.9rem">Your name</label>
+      <input id="nameInput" maxlength="16" autocomplete="nickname" enterkeyhint="done">
+      <div class="row">
+        <button type="button" id="nameSkip">Skip</button>
+        <button type="submit" class="primary" value="save">Save</button>
+      </div>
+    </div>
+  </form>
+</dialog>
 
 <script>
-const board = document.getElementById('board');
-const face = document.getElementById('face');
-const minesEl = document.getElementById('mines');
-const timeEl = document.getElementById('time');
-const msg = document.getElementById('msg');
-const bestEl = document.getElementById('best');
-const flagBtn = document.getElementById('flagBtn');
-const level = document.getElementById('level');
+"use strict";
 
-let R, C, M, cells, started, over, timer, secs, openCount, flags;
-let flagMode = false;
+/* =====================================================================
+   SETTINGS
+   ===================================================================== */
+const LEVELS = [
+  { id: 'l8',  label: 'Level 1', rows: 8,  cols: 8,  mines: 10  },
+  { id: 'l12', label: 'Level 2', rows: 12, cols: 12, mines: 24  },
+  { id: 'l16', label: 'Level 3', rows: 16, cols: 16, mines: 46  },
+  { id: 'l20', label: 'Level 4', rows: 20, cols: 20, mines: 76  },
+  { id: 'l24', label: 'Level 5', rows: 24, cols: 24, mines: 116 }
+];
+const LONG_PRESS_MS = 400;   // hold time for a flag on touch screens
+const MOVE_CANCEL_PX = 10;   // finger movement that cancels a long-press (scrolling)
+const TOP_N = 10;            // leaderboard size
+const STORE_KEY = 'ms-v2';   // all saved data for this game is under this key
 
-// ---------- saved settings and best times (safe if storage is blocked) ----------
-function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
-function save(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
-
-const savedLevel = load('ms-level');
-if (savedLevel) level.value = savedLevel;
-
-function showBest() {
-  const b = load('ms-best-' + level.value);
-  bestEl.textContent = b ? 'Best time for this level: ' + b + 's' : '';
+/* =====================================================================
+   SAVED DATA  (localStorage, safe if blocked)
+   data = { level: 'l8', lastName: '', stats: { l8: {played, won, times:[], top:[{name,time,date}]} } }
+   ===================================================================== */
+function loadData() {
+  try { const d = JSON.parse(localStorage.getItem(STORE_KEY)); if (d && d.stats) return d; } catch (e) {}
+  return { level: 'l8', lastName: '', stats: {} };
 }
+function saveData() { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) {} }
+function statsFor(id) {
+  if (!data.stats[id]) data.stats[id] = { played: 0, won: 0, times: [], top: [] };
+  return data.stats[id];
+}
+const data = loadData();
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
-// ---------- board setup ----------
-function sizeCells() {
-  const avail = Math.min(window.innerWidth - 40, 640);
-  let s = Math.floor((avail - 4 - (C - 1) * 2) / C);
-  s = Math.max(28, Math.min(42, s));
-  board.style.setProperty('--s', s + 'px');
+/* =====================================================================
+   GAME STATE
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const boardEl = $('board'), faceEl = $('face'), minesEl = $('mines'), timeEl = $('time');
+
+let level = LEVELS.find(l => l.id === data.level) || LEVELS[0];
+let cells = [], R, C, M;
+let state = 'ready';            // ready | playing | won | lost
+let openCount = 0, flagCount = 0;
+let t0 = 0, tickTimer = null;
+
+function pad3(n) {
+  n = Math.max(-99, Math.min(999, n));
+  return n < 0 ? '-' + String(-n).padStart(2, '0') : String(n).padStart(3, '0');
 }
 
 function newGame() {
-  [R, C, M] = level.value.split(',').map(Number);
-  clearInterval(timer);
-  secs = 0; started = false; over = false; openCount = 0; flags = 0;
+  R = level.rows; C = level.cols; M = level.mines;
+  clearInterval(tickTimer);
+  state = 'ready'; openCount = 0; flagCount = 0;
   cells = [];
-  board.innerHTML = '';
-  board.style.gridTemplateColumns = 'repeat(' + C + ', var(--s))';
-  for (let r = 0; r < R; r++) {
-    for (let c = 0; c < C; c++) {
-      const el = document.createElement('div');
-      el.className = 'c';
-      el.dataset.i = cells.length;
-      cells.push({ r, c, mine: false, n: 0, open: false, flag: false, el });
-      board.appendChild(el);
-    }
+  boardEl.innerHTML = '';
+  boardEl.style.gridTemplateColumns = 'repeat(' + C + ', var(--s))';
+  const frag = document.createDocumentFragment();
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
+    const el = document.createElement('div');
+    el.className = 'c';
+    el.dataset.i = cells.length;
+    cells.push({ r, c, mine: false, n: 0, open: false, flag: false, el });
+    frag.appendChild(el);
   }
+  boardEl.appendChild(frag);
   sizeCells();
-  updateStatus();
-  showBest();
-  face.textContent = '🙂';
-  msg.textContent = '';
+  faceEl.textContent = '🙂';
+  minesEl.textContent = pad3(M);
+  timeEl.textContent = pad3(0);
+  $('levelName').textContent = level.label + ' · ' + R + '×' + C + ' · ' + M + ' mines';
+}
+
+// Cell size: big for small boards; never below 30 px (touch target). Large boards scroll.
+function sizeCells() {
+  const avail = Math.min(window.innerWidth, 900) - 44;
+  const s = Math.max(30, Math.min(44, Math.floor(avail / C)));
+  boardEl.style.setProperty('--s', s + 'px');
 }
 
 function neighbours(cell) {
   const out = [];
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -1; dc <= 1; dc++) {
-      if (!dr && !dc) continue;
-      const r = cell.r + dr, c = cell.c + dc;
-      if (r >= 0 && r < R && c >= 0 && c < C) out.push(cells[r * C + c]);
-    }
+  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+    if (!dr && !dc) continue;
+    const r = cell.r + dr, c = cell.c + dc;
+    if (r >= 0 && r < R && c >= 0 && c < C) out.push(cells[r * C + c]);
   }
   return out;
 }
 
-// First tap is always safe: no mine on it or around it.
+// First tap is always safe: no mine on it or on its 8 neighbours.
 function placeMines(safe) {
   const avoid = new Set([safe, ...neighbours(safe)]);
-  let pool = cells.filter(x => !avoid.has(x));
-  if (pool.length < M) pool = cells.filter(x => x !== safe);
+  const pool = cells.filter(x => !avoid.has(x));
   for (let k = 0; k < M; k++) {
     const j = k + Math.floor(Math.random() * (pool.length - k));
     [pool[k], pool[j]] = [pool[j], pool[k]];
@@ -135,39 +275,45 @@ function placeMines(safe) {
   cells.forEach(x => { x.n = neighbours(x).filter(y => y.mine).length; });
 }
 
-function startGame(cell) {
-  placeMines(cell);
-  started = true;
-  timer = setInterval(() => { secs++; updateStatus(); }, 1000);
+function startGame(first) {
+  placeMines(first);
+  state = 'playing';
+  t0 = performance.now();
+  tickTimer = setInterval(() => { timeEl.textContent = pad3(Math.floor(elapsed())); }, 250);
+  // A game counts as "played" when the first cell is opened.
+  // So a game that is not finished (new game, level change, page closed) counts as not won.
+  statsFor(level.id).played++;
+  saveData();
 }
+function elapsed() { return (performance.now() - t0) / 1000; }
 
-// ---------- game actions ----------
+/* ---------- actions ---------- */
 function reveal(cell) {
-  if (over || cell.open || cell.flag) return;
+  if (state !== 'playing' || cell.open || cell.flag) return;
   if (cell.mine) { lose(cell); return; }
   const stack = [cell];
   while (stack.length) {
     const x = stack.pop();
     if (x.open || x.flag) continue;
-    x.open = true;
-    openCount++;
-    draw(x);
-    if (x.n === 0) neighbours(x).forEach(y => { if (!y.open && !y.mine) stack.push(y); });
+    x.open = true; openCount++; draw(x);
+    if (x.n === 0) neighbours(x).forEach(y => { if (!y.open && !y.flag) stack.push(y); });
   }
   if (openCount === R * C - M) win();
 }
 
 function chord(cell) {
+  if (state !== 'playing' || !cell.open || !cell.n) return;
   const ns = neighbours(cell);
-  if (ns.filter(y => y.flag).length === cell.n) ns.forEach(y => reveal(y));
+  if (ns.filter(y => y.flag).length !== cell.n) return;
+  for (const y of ns) { reveal(y); if (state !== 'playing') return; }
 }
 
 function toggleFlag(cell) {
-  if (cell.open || over) return;
+  if (cell.open || (state !== 'playing' && state !== 'ready')) return;
   cell.flag = !cell.flag;
-  flags += cell.flag ? 1 : -1;
+  flagCount += cell.flag ? 1 : -1;
   draw(cell);
-  updateStatus();
+  minesEl.textContent = pad3(M - flagCount);
 }
 
 function draw(x) {
@@ -176,101 +322,354 @@ function draw(x) {
   el.textContent = '';
   if (x.open) {
     el.classList.add('o');
-    if (x.mine) el.textContent = '💣';
+    if (x.mine) el.innerHTML = '<span class="e">💣</span>';
     else if (x.n) { el.textContent = x.n; el.classList.add('n' + x.n); }
   } else if (x.flag) {
-    el.textContent = '🚩';
+    el.innerHTML = '<span class="e">🚩</span>';
   }
 }
 
 function lose(hit) {
-  over = true;
-  clearInterval(timer);
+  state = 'lost';
+  clearInterval(tickTimer);
   cells.forEach(x => {
     if (x.mine && !x.flag) { x.open = true; draw(x); }
-    else if (!x.mine && x.flag) { x.el.textContent = '❌'; }
+    else if (!x.mine && x.flag) { x.el.innerHTML = '<span class="e">❌</span>'; }
   });
   hit.el.classList.add('boom');
-  face.textContent = '😵';
-  msg.textContent = 'Boom! Tap the face to try again.';
+  faceEl.textContent = '😵';
 }
 
 function win() {
-  over = true;
-  clearInterval(timer);
+  state = 'won';
+  clearInterval(tickTimer);
+  const t = Math.round(elapsed() * 10) / 10;      // record to 0.1 s
+  timeEl.textContent = pad3(Math.floor(t));
   cells.forEach(x => { if (x.mine && !x.flag) { x.flag = true; draw(x); } });
-  flags = M;
-  updateStatus();
-  face.textContent = '😎';
-  const key = 'ms-best-' + level.value;
-  const best = Number(load(key));
-  if (!best || secs < best) {
-    save(key, secs);
-    msg.textContent = '🎉 You win in ' + secs + 's — new best time!';
-  } else {
-    msg.textContent = '🎉 You win in ' + secs + 's!';
+  flagCount = M; minesEl.textContent = pad3(0);
+  faceEl.textContent = '😎';
+
+  const s = statsFor(level.id);
+  s.won++;
+  s.times.push(t);
+  saveData();
+
+  if (s.top.length < TOP_N || t < s.top[s.top.length - 1].time) {
+    setTimeout(() => askName(t), 350);
   }
-  showBest();
 }
 
-function updateStatus() {
-  minesEl.textContent = '💣 ' + (M - flags);
-  timeEl.textContent = '⏱ ' + secs;
-}
+/* =====================================================================
+   INPUT
+   Touch: tap = dig (or open neighbours on a number), long-press = flag.
+   Mouse: click = dig, Shift+click or right-click = flag.
+   ===================================================================== */
+let press = null;   // { cell, x, y, timer, long, type }
 
-// ---------- input: tap, right-click, long-press ----------
-let pressTimer = null, longFired = false, lastType = 'mouse';
+function cellAt(e) { const el = e.target.closest && e.target.closest('.c'); return el ? cells[el.dataset.i] : null; }
+function canPlay() { return state === 'ready' || state === 'playing'; }
 
-function cellFrom(e) {
-  const el = e.target.closest('.c');
-  return el ? cells[el.dataset.i] : null;
-}
-
-board.addEventListener('pointerdown', e => {
-  lastType = e.pointerType;
-  longFired = false;
-  if (e.pointerType === 'mouse') return;
-  const cell = cellFrom(e);
-  if (!cell || over) return;
-  pressTimer = setTimeout(() => {
-    longFired = true;
-    if (!cell.open) toggleFlag(cell);
-    if (navigator.vibrate) navigator.vibrate(30);
-  }, 400);
+boardEl.addEventListener('pointerdown', e => {
+  const cell = cellAt(e);
+  if (!cell || !canPlay()) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  press = { cell, x: e.clientX, y: e.clientY, long: false, type: e.pointerType, timer: null };
+  if (!cell.open && !cell.flag && !(e.pointerType === 'mouse' && e.shiftKey)) {
+    cell.el.classList.add('press');
+    faceEl.textContent = '😮';
+  }
+  if (e.pointerType !== 'mouse') {
+    press.timer = setTimeout(() => {
+      if (!press) return;
+      press.long = true;
+      clearPressLook();
+      if (!press.cell.open) {
+        toggleFlag(press.cell);
+        if (navigator.vibrate) navigator.vibrate(30);
+      }
+    }, LONG_PRESS_MS);
+  }
 });
-['pointerup', 'pointercancel', 'pointerleave'].forEach(t =>
-  board.addEventListener(t, () => clearTimeout(pressTimer)));
 
-board.addEventListener('click', e => {
-  const cell = cellFrom(e);
-  if (!cell || over) return;
-  if (longFired) { longFired = false; return; }
-  if (flagMode && !cell.open) { toggleFlag(cell); return; }
+boardEl.addEventListener('pointermove', e => {
+  if (!press) return;
+  if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > MOVE_CANCEL_PX) cancelPress();
+});
+boardEl.addEventListener('pointercancel', cancelPress);
+boardEl.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') cancelPress(); });
+
+boardEl.addEventListener('pointerup', e => {
+  if (!press) return;
+  const p = press;
+  clearTimeout(p.timer);
+  clearPressLook();
+  press = null;
+  if (p.long) return;                                 // long-press already placed the flag
+  if (cellAt(e) !== p.cell) return;                   // released on a different cell
+  act(p.cell, e.pointerType === 'mouse' && e.shiftKey);
+});
+
+function cancelPress() {
+  if (!press) return;
+  clearTimeout(press.timer);
+  clearPressLook();
+  press = null;
+}
+function clearPressLook() {
+  boardEl.querySelectorAll('.press').forEach(el => el.classList.remove('press'));
+  if (canPlay()) faceEl.textContent = '🙂';
+}
+
+function act(cell, flagIntent) {
+  if (!canPlay()) return;
+  if (flagIntent) {                                   // Shift + click
+    if (cell.open) chord(cell); else toggleFlag(cell);
+    return;
+  }
   if (cell.flag) return;
-  if (!started) startGame(cell);
-  if (cell.open) { if (cell.n) chord(cell); }
-  else reveal(cell);
-});
+  if (cell.open) { chord(cell); return; }
+  if (state === 'ready') startGame(cell);
+  reveal(cell);
+}
 
-board.addEventListener('contextmenu', e => {
+// Right-click flags (mouse). Stop the long-press menu on touch screens.
+boardEl.addEventListener('contextmenu', e => {
   e.preventDefault();
-  if (lastType !== 'mouse') return;   // touch long-press is handled above
-  const cell = cellFrom(e);
-  if (!cell || over) return;
-  if (cell.open) { if (cell.n) chord(cell); }
-  else toggleFlag(cell);
+  if (e.pointerType && e.pointerType !== 'mouse') return;
+  if (press && press.type !== 'mouse') return;
+  const cell = cellAt(e);
+  if (!cell || !canPlay()) return;
+  if (cell.open) chord(cell); else toggleFlag(cell);
 });
 
-// ---------- buttons ----------
-face.addEventListener('click', newGame);
-level.addEventListener('change', () => { save('ms-level', level.value); newGame(); });
-flagBtn.addEventListener('click', () => {
-  flagMode = !flagMode;
-  flagBtn.classList.toggle('on', flagMode);
-  flagBtn.textContent = '🚩 Flag mode: ' + (flagMode ? 'on' : 'off');
-});
-window.addEventListener('resize', sizeCells);
+/* =====================================================================
+   LEVEL MENU (gear)
+   ===================================================================== */
+const menu = $('menu'), gearBtn = $('gearBtn');
 
+function buildMenu() {
+  menu.innerHTML = '';
+  LEVELS.forEach(l => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'menuitemradio');
+    b.setAttribute('aria-checked', l.id === level.id);
+    b.innerHTML = '<span class="tick">' + (l.id === level.id ? '✔' : '') + '</span>';
+    b.append(l.label + ' — ' + l.rows + '×' + l.cols + ', ' + l.mines + ' mines');
+    b.addEventListener('click', () => { closeMenu(); setLevel(l); });
+    menu.appendChild(b);
+  });
+}
+function openMenu() {
+  buildMenu();
+  menu.hidden = false;
+  const r = gearBtn.getBoundingClientRect();
+  const w = menu.offsetWidth;
+  menu.style.top = (window.scrollY + r.bottom + 4) + 'px';
+  menu.style.left = Math.max(8, Math.min(window.scrollX + r.right - w, window.innerWidth - w - 8)) + 'px';
+  gearBtn.setAttribute('aria-expanded', 'true');
+  menu.querySelector('[aria-checked="true"]').focus();
+}
+function closeMenu() { menu.hidden = true; gearBtn.setAttribute('aria-expanded', 'false'); }
+gearBtn.addEventListener('click', e => { e.stopPropagation(); menu.hidden ? openMenu() : closeMenu(); });
+document.addEventListener('click', e => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !menu.hidden) { closeMenu(); gearBtn.focus(); } });
+
+function setLevel(l) {
+  level = l;
+  data.level = l.id;
+  saveData();
+  newGame();
+}
+
+/* =====================================================================
+   STATISTICS
+   ===================================================================== */
+const statsDlg = $('statsDlg');
+let statsLevel = level, highlight = null;   // highlight = {level, time, date} of a new record
+
+function openStats(l) {
+  statsLevel = l || level;
+  renderStats();
+  if (!statsDlg.open) statsDlg.showModal();
+}
+$('statsBtn').addEventListener('click', () => { highlight = null; openStats(level); });
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+statsDlg.addEventListener('click', e => { if (e.target === statsDlg) statsDlg.close(); });
+
+function renderStats() {
+  const tabs = $('statTabs');
+  tabs.innerHTML = '';
+  LEVELS.forEach(l => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = l.rows + '×' + l.cols;
+    b.title = l.label + ', ' + l.mines + ' mines';
+    if (l.id === statsLevel.id) b.className = 'on';
+    b.addEventListener('click', () => { statsLevel = l; renderStats(); });
+    tabs.appendChild(b);
+  });
+
+  const s = statsFor(statsLevel.id);
+  $('statsTitle').textContent = 'Statistics — ' + statsLevel.label + ' (' + statsLevel.rows + '×' + statsLevel.cols + ', ' + statsLevel.mines + ' mines)';
+  $('sPlayed').textContent = s.played;
+  $('sWon').textContent = s.won;
+  $('sRate').textContent = s.played ? (s.won / s.played * 100).toFixed(1) + '%' : '–';
+  $('sBest').textContent = s.top.length ? s.top[0].time.toFixed(1) + 's' : '–';
+
+  // leaderboard
+  const lb = $('board10');
+  if (!s.top.length) {
+    lb.innerHTML = '<div class="empty">No wins yet on this level.</div>';
+  } else {
+    const t = document.createElement('table');
+    t.innerHTML = '<thead><tr><th>#</th><th>Name</th><th class="r">Time</th><th class="r">Date</th></tr></thead>';
+    const tb = document.createElement('tbody');
+    s.top.forEach((e, i) => {
+      const tr = document.createElement('tr');
+      if (highlight && highlight.level === statsLevel.id && highlight.date === e.date && highlight.time === e.time) tr.className = 'new';
+      const medal = ['🥇', '🥈', '🥉'][i] || String(i + 1);
+      [medal, e.name, e.time.toFixed(1) + 's', new Date(e.date).toLocaleDateString()].forEach((v, k) => {
+        const td = document.createElement('td');
+        td.textContent = v;            // textContent: names are never treated as HTML
+        if (k >= 2) td.className = 'r';
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    lb.innerHTML = '';
+    lb.appendChild(t);
+  }
+
+  renderHistogram(s.times);
+}
+
+// Percentile with linear interpolation (same method as Excel PERCENTILE.INC).
+function percentile(sorted, p) {
+  if (sorted.length === 1) return sorted[0];
+  const h = (sorted.length - 1) * p, lo = Math.floor(h), hi = Math.ceil(h);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (h - lo);
+}
+function niceStep(raw) {
+  const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e;
+}
+
+function renderHistogram(times) {
+  const wrap = $('histWrap');
+  if (!times.length) { wrap.innerHTML = '<div class="empty">Win a game on this level to see the graph.</div>'; return; }
+
+  const xs = times.slice().sort((a, b) => a - b), n = xs.length;
+  const mean = xs.reduce((a, b) => a + b, 0) / n;
+  const marks = [
+    { key: 'p5',  label: '5%',      v: percentile(xs, 0.05), color: '#7b1fa2', dash: '2 3' },
+    { key: 'med', label: 'Median',  v: percentile(xs, 0.5),  color: '#2e7d32', dash: '6 3' },
+    { key: 'avg', label: 'Average', v: mean,                 color: '#e65100', dash: '' },
+    { key: 'p95', label: '95%',     v: percentile(xs, 0.95), color: '#c62828', dash: '2 3' }
+  ];
+
+  // bins: about sqrt(n) bins, 5 to 20, with a round width of at least 1 s
+  const k = Math.max(5, Math.min(20, Math.ceil(Math.sqrt(n))));
+  const step = Math.max(1, niceStep(Math.max(xs[n - 1] - xs[0], 1) / k));
+  const x0 = Math.floor(xs[0] / step) * step;
+  const nb = Math.max(1, Math.floor((xs[n - 1] - x0) / step) + 1);
+  const counts = new Array(nb).fill(0);
+  xs.forEach(v => counts[Math.min(nb - 1, Math.floor((v - x0) / step))]++);
+  const x1 = x0 + nb * step, cmax = Math.max(...counts);
+
+  const W = 520, H = 220, L = 34, Rm = 10, T = 26, B = 30;
+  const pw = W - L - Rm, ph = H - T - B;
+  const sx = v => L + (v - x0) / (x1 - x0) * pw;
+  const sy = c => T + ph - c / cmax * ph;
+
+  let svg = '<svg id="hist" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Histogram of finish times">';
+  // y gridlines and labels
+  const ystep = niceStep(Math.max(1, cmax / 4));
+  for (let c = 0; c <= cmax; c += ystep) {
+    svg += '<line x1="' + L + '" x2="' + (W - Rm) + '" y1="' + sy(c) + '" y2="' + sy(c) + '" stroke="currentColor" stroke-opacity=".15"/>';
+    svg += '<text x="' + (L - 6) + '" y="' + (sy(c) + 4) + '" text-anchor="end">' + c + '</text>';
+  }
+  // bars
+  counts.forEach((c, i) => {
+    if (!c) return;
+    const xa = sx(x0 + i * step) + 1, xb = sx(x0 + (i + 1) * step) - 1;
+    svg += '<rect x="' + xa + '" y="' + sy(c) + '" width="' + Math.max(1, xb - xa) + '" height="' + (T + ph - sy(c)) +
+           '" fill="#1565c0" fill-opacity=".75"><title>' + (x0 + i * step) + '–' + (x0 + (i + 1) * step) + 's: ' + c + ' game' + (c > 1 ? 's' : '') + '</title></rect>';
+  });
+  // x axis labels
+  const xstep = niceStep(Math.max(step, (x1 - x0) / 6));
+  for (let v = Math.ceil(x0 / xstep) * xstep; v <= x1 + 1e-9; v += xstep) {
+    svg += '<text x="' + sx(v) + '" y="' + (H - B + 16) + '" text-anchor="middle">' + +v.toFixed(1) + '</text>';
+  }
+  svg += '<text x="' + (W - Rm) + '" y="' + (H - 2) + '" text-anchor="end">seconds</text>';
+  svg += '<line x1="' + L + '" x2="' + (W - Rm) + '" y1="' + (T + ph) + '" y2="' + (T + ph) + '" stroke="currentColor" stroke-opacity=".5"/>';
+  // marker lines
+  marks.forEach((m, i) => {
+    const x = sx(m.v);
+    svg += '<line x1="' + x + '" x2="' + x + '" y1="' + (T - 4) + '" y2="' + (T + ph) + '" stroke="' + m.color + '" stroke-width="2"' +
+           (m.dash ? ' stroke-dasharray="' + m.dash + '"' : '') + '/>';
+    svg += '<text x="' + x + '" y="' + (T - 8 - (i % 2) * 11) + '" text-anchor="middle" style="fill:' + m.color + ';font-weight:700">' + m.label + '</text>';
+  });
+  svg += '</svg>';
+
+  let legend = '<div class="legend">';
+  marks.forEach(m => {
+    legend += '<span><i style="border-color:' + m.color + ';border-top-style:' + (m.dash ? 'dashed' : 'solid') + '"></i>' +
+              m.label + ': <b>' + m.v.toFixed(1) + 's</b></span>';
+  });
+  legend += '</div>';
+  const note = n < 20 ? '<div class="note">Only ' + n + ' win' + (n > 1 ? 's' : '') +
+               ' so far. The 5% and 95% marks become more meaningful after about 20 wins.</div>' : '';
+  wrap.innerHTML = svg + legend + note;
+}
+
+$('resetBtn').addEventListener('click', () => {
+  if (!confirm('Delete all statistics and top-10 times for ' + statsLevel.label + '? This cannot be undone.')) return;
+  delete data.stats[statsLevel.id];
+  saveData();
+  renderStats();
+});
+
+/* =====================================================================
+   NAME ENTRY FOR A TOP-10 TIME
+   ===================================================================== */
+const nameDlg = $('nameDlg'), nameInput = $('nameInput');
+let pendingTime = null;
+
+function askName(t) {
+  pendingTime = t;
+  const s = statsFor(level.id);
+  const rank = s.top.filter(e => e.time <= t).length + 1;
+  $('nameMsg').textContent = 'You finished in ' + t.toFixed(1) + ' seconds. That is #' + rank + ' on ' + level.label + '!';
+  nameInput.value = data.lastName || '';
+  nameDlg.showModal();
+  nameInput.focus();
+  nameInput.select();
+}
+function saveRecord(name) {
+  if (pendingTime === null) return;
+  const s = statsFor(level.id);
+  const entry = { name: (name || 'Player').trim().slice(0, 16) || 'Player', time: pendingTime, date: Date.now() };
+  s.top.push(entry);
+  s.top.sort((a, b) => a.time - b.time || a.date - b.date);
+  s.top = s.top.slice(0, TOP_N);
+  if (name && name.trim()) data.lastName = entry.name;
+  saveData();
+  pendingTime = null;
+  highlight = { level: level.id, time: entry.time, date: entry.date };
+  openStats(level);
+}
+$('nameForm').addEventListener('submit', () => saveRecord(nameInput.value));
+$('nameSkip').addEventListener('click', () => { nameDlg.close(); saveRecord(''); });
+nameDlg.addEventListener('cancel', e => { e.preventDefault(); });   // Esc does not lose the record
+
+/* =====================================================================
+   START
+   ===================================================================== */
+faceEl.addEventListener('click', newGame);
+let resizeTimer;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(sizeCells, 100); });
 newGame();
 </script>
 </body>
