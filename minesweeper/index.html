@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minesweeper · Kids Games</title>
+<style>
+:root{--bg:#f3f4f6;--panel:#ffffff;--text:#1f2937;--cell:#cbd5e1;--cell-hi:#d9e2ec;--open:#f8fafc;--line:#94a3b8;--mine:#ef4444;--accent:#2563eb;}
+@media (prefers-color-scheme: dark){:root{--bg:#111827;--panel:#1f2937;--text:#f3f4f6;--cell:#475569;--cell-hi:#5b6b80;--open:#0f172a;--line:#334155;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;padding:16px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+h1{margin:4px 0 12px;font-size:1.6rem}
+.back{align-self:flex-start;color:var(--accent);text-decoration:none;font-size:1rem;padding:4px 0}
+.back:hover{text-decoration:underline}
+.controls{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:10px}
+button,select{font:inherit;font-size:1rem;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer}
+button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.status{display:flex;gap:16px;align-items:center;justify-content:center;font-size:1.15rem;font-variant-numeric:tabular-nums;margin-bottom:10px;background:var(--panel);padding:6px 16px;border-radius:10px}
+#face{font-size:1.7rem;padding:0 8px;background:none;border:none}
+.wrap{max-width:100%;overflow:auto;padding-bottom:6px}
+#board{display:grid;gap:2px;background:var(--line);padding:2px;border-radius:6px;touch-action:manipulation;width:max-content}
+.c{width:var(--s);height:var(--s);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:calc(var(--s) * 0.55);background:var(--cell);border-radius:3px;cursor:pointer}
+@media (hover:hover){.c:not(.o):hover{background:var(--cell-hi)}}
+.c.o{background:var(--open);cursor:default}
+.c.boom{background:var(--mine)}
+.n1{color:#2563eb}.n2{color:#16a34a}.n3{color:#dc2626}.n4{color:#7c3aed}
+.n5{color:#b45309}.n6{color:#0891b2}.n7{color:#db2777}.n8{color:#6b7280}
+#msg{min-height:1.5em;margin-top:10px;font-size:1.2rem;font-weight:700;text-align:center}
+.help{margin-top:6px;font-size:.9rem;opacity:.75;text-align:center;max-width:440px;line-height:1.4}
+</style>
+</head>
+<body>
+<a class="back" href="../">← All games</a>
+<h1>💣 Minesweeper</h1>
+
+<div class="controls">
+  <select id="level" aria-label="Difficulty">
+    <option value="8,8,8">Easy (8×8, 8 mines)</option>
+    <option value="9,9,10">Beginner (9×9, 10 mines)</option>
+    <option value="16,16,40">Medium (16×16, 40 mines)</option>
+    <option value="16,30,99">Hard (16×30, 99 mines)</option>
+  </select>
+  <button id="flagBtn" type="button">🚩 Flag mode: off</button>
+</div>
+
+<div class="status">
+  <span id="mines">💣 0</span>
+  <button id="face" type="button" aria-label="New game">🙂</button>
+  <span id="time">⏱ 0</span>
+</div>
+
+<div class="wrap"><div id="board"></div></div>
+<div id="msg"></div>
+<div class="help" id="best"></div>
+<div class="help">Tap to dig. Long-press (or right-click) to place a flag. Tap a number to open its neighbours when the flags around it match the number.</div>
+
+<script>
+const board = document.getElementById('board');
+const face = document.getElementById('face');
+const minesEl = document.getElementById('mines');
+const timeEl = document.getElementById('time');
+const msg = document.getElementById('msg');
+const bestEl = document.getElementById('best');
+const flagBtn = document.getElementById('flagBtn');
+const level = document.getElementById('level');
+
+let R, C, M, cells, started, over, timer, secs, openCount, flags;
+let flagMode = false;
+
+// ---------- saved settings and best times (safe if storage is blocked) ----------
+function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function save(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
+const savedLevel = load('ms-level');
+if (savedLevel) level.value = savedLevel;
+
+function showBest() {
+  const b = load('ms-best-' + level.value);
+  bestEl.textContent = b ? 'Best time for this level: ' + b + 's' : '';
+}
+
+// ---------- board setup ----------
+function sizeCells() {
+  const avail = Math.min(window.innerWidth - 40, 640);
+  let s = Math.floor((avail - 4 - (C - 1) * 2) / C);
+  s = Math.max(28, Math.min(42, s));
+  board.style.setProperty('--s', s + 'px');
+}
+
+function newGame() {
+  [R, C, M] = level.value.split(',').map(Number);
+  clearInterval(timer);
+  secs = 0; started = false; over = false; openCount = 0; flags = 0;
+  cells = [];
+  board.innerHTML = '';
+  board.style.gridTemplateColumns = 'repeat(' + C + ', var(--s))';
+  for (let r = 0; r < R; r++) {
+    for (let c = 0; c < C; c++) {
+      const el = document.createElement('div');
+      el.className = 'c';
+      el.dataset.i = cells.length;
+      cells.push({ r, c, mine: false, n: 0, open: false, flag: false, el });
+      board.appendChild(el);
+    }
+  }
+  sizeCells();
+  updateStatus();
+  showBest();
+  face.textContent = '🙂';
+  msg.textContent = '';
+}
+
+function neighbours(cell) {
+  const out = [];
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const r = cell.r + dr, c = cell.c + dc;
+      if (r >= 0 && r < R && c >= 0 && c < C) out.push(cells[r * C + c]);
+    }
+  }
+  return out;
+}
+
+// First tap is always safe: no mine on it or around it.
+function placeMines(safe) {
+  const avoid = new Set([safe, ...neighbours(safe)]);
+  let pool = cells.filter(x => !avoid.has(x));
+  if (pool.length < M) pool = cells.filter(x => x !== safe);
+  for (let k = 0; k < M; k++) {
+    const j = k + Math.floor(Math.random() * (pool.length - k));
+    [pool[k], pool[j]] = [pool[j], pool[k]];
+    pool[k].mine = true;
+  }
+  cells.forEach(x => { x.n = neighbours(x).filter(y => y.mine).length; });
+}
+
+function startGame(cell) {
+  placeMines(cell);
+  started = true;
+  timer = setInterval(() => { secs++; updateStatus(); }, 1000);
+}
+
+// ---------- game actions ----------
+function reveal(cell) {
+  if (over || cell.open || cell.flag) return;
+  if (cell.mine) { lose(cell); return; }
+  const stack = [cell];
+  while (stack.length) {
+    const x = stack.pop();
+    if (x.open || x.flag) continue;
+    x.open = true;
+    openCount++;
+    draw(x);
+    if (x.n === 0) neighbours(x).forEach(y => { if (!y.open && !y.mine) stack.push(y); });
+  }
+  if (openCount === R * C - M) win();
+}
+
+function chord(cell) {
+  const ns = neighbours(cell);
+  if (ns.filter(y => y.flag).length === cell.n) ns.forEach(y => reveal(y));
+}
+
+function toggleFlag(cell) {
+  if (cell.open || over) return;
+  cell.flag = !cell.flag;
+  flags += cell.flag ? 1 : -1;
+  draw(cell);
+  updateStatus();
+}
+
+function draw(x) {
+  const el = x.el;
+  el.className = 'c';
+  el.textContent = '';
+  if (x.open) {
+    el.classList.add('o');
+    if (x.mine) el.textContent = '💣';
+    else if (x.n) { el.textContent = x.n; el.classList.add('n' + x.n); }
+  } else if (x.flag) {
+    el.textContent = '🚩';
+  }
+}
+
+function lose(hit) {
+  over = true;
+  clearInterval(timer);
+  cells.forEach(x => {
+    if (x.mine && !x.flag) { x.open = true; draw(x); }
+    else if (!x.mine && x.flag) { x.el.textContent = '❌'; }
+  });
+  hit.el.classList.add('boom');
+  face.textContent = '😵';
+  msg.textContent = 'Boom! Tap the face to try again.';
+}
+
+function win() {
+  over = true;
+  clearInterval(timer);
+  cells.forEach(x => { if (x.mine && !x.flag) { x.flag = true; draw(x); } });
+  flags = M;
+  updateStatus();
+  face.textContent = '😎';
+  const key = 'ms-best-' + level.value;
+  const best = Number(load(key));
+  if (!best || secs < best) {
+    save(key, secs);
+    msg.textContent = '🎉 You win in ' + secs + 's — new best time!';
+  } else {
+    msg.textContent = '🎉 You win in ' + secs + 's!';
+  }
+  showBest();
+}
+
+function updateStatus() {
+  minesEl.textContent = '💣 ' + (M - flags);
+  timeEl.textContent = '⏱ ' + secs;
+}
+
+// ---------- input: tap, right-click, long-press ----------
+let pressTimer = null, longFired = false, lastType = 'mouse';
+
+function cellFrom(e) {
+  const el = e.target.closest('.c');
+  return el ? cells[el.dataset.i] : null;
+}
+
+board.addEventListener('pointerdown', e => {
+  lastType = e.pointerType;
+  longFired = false;
+  if (e.pointerType === 'mouse') return;
+  const cell = cellFrom(e);
+  if (!cell || over) return;
+  pressTimer = setTimeout(() => {
+    longFired = true;
+    if (!cell.open) toggleFlag(cell);
+    if (navigator.vibrate) navigator.vibrate(30);
+  }, 400);
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(t =>
+  board.addEventListener(t, () => clearTimeout(pressTimer)));
+
+board.addEventListener('click', e => {
+  const cell = cellFrom(e);
+  if (!cell || over) return;
+  if (longFired) { longFired = false; return; }
+  if (flagMode && !cell.open) { toggleFlag(cell); return; }
+  if (cell.flag) return;
+  if (!started) startGame(cell);
+  if (cell.open) { if (cell.n) chord(cell); }
+  else reveal(cell);
+});
+
+board.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (lastType !== 'mouse') return;   // touch long-press is handled above
+  const cell = cellFrom(e);
+  if (!cell || over) return;
+  if (cell.open) { if (cell.n) chord(cell); }
+  else toggleFlag(cell);
+});
+
+// ---------- buttons ----------
+face.addEventListener('click', newGame);
+level.addEventListener('change', () => { save('ms-level', level.value); newGame(); });
+flagBtn.addEventListener('click', () => {
+  flagMode = !flagMode;
+  flagBtn.classList.toggle('on', flagMode);
+  flagBtn.textContent = '🚩 Flag mode: ' + (flagMode ? 'on' : 'off');
+});
+window.addEventListener('resize', sizeCells);
+
+newGame();
+</script>
+</body>
+</html>
