@@ -22,6 +22,7 @@ body{margin:0;background:var(--page);color:var(--text);
   -webkit-tap-highlight-color:transparent;padding:12px 8px 24px}
 a.back{display:inline-block;color:#fff;text-decoration:none;font-size:.95rem;margin:0 0 8px 4px}
 a.back:hover{text-decoration:underline}
+.who{color:#fff;font-size:.95rem;margin-left:10px;opacity:.95}
 
 /* ---------- classic raised window ---------- */
 .game{width:max-content;max-width:100%;margin:0 auto;background:var(--face);padding:6px;
@@ -113,7 +114,7 @@ tr.new td{background:rgba(255,215,0,.28);font-weight:700}
 </style>
 </head>
 <body>
-<a class="back" href="../">← All games</a>
+<a class="back" href="../">← All games</a><span class="who" id="who"></span>
 
 <div class="game" id="game">
   <div class="top sunk">
@@ -148,7 +149,9 @@ Tap a number to open its neighbours when its flags match the number.</p>
       <div class="card"><b id="sRate">–</b><span>Success rate</span></div>
       <div class="card"><b id="sBest">–</b><span>Best time</span></div>
     </div>
-    <h3>Top 10 fastest</h3>
+    <h3 id="famTitle" hidden>Family top 10 (all devices)</h3>
+    <div id="famBoard" hidden></div>
+    <h3>Top 10 on this device</h3>
     <div id="board10"></div>
     <h3>Finish times (games won)</h3>
     <div id="histWrap"></div>
@@ -354,9 +357,7 @@ function win() {
   s.times.push(t);
   saveData();
 
-  if (s.top.length < TOP_N || t < s.top[s.top.length - 1].time) {
-    setTimeout(() => askName(t), 350);
-  }
+  recordWin(t);
 }
 
 /* =====================================================================
@@ -543,6 +544,7 @@ function renderStats() {
   }
 
   renderHistogram(s.times);
+  renderFamily();
 }
 
 // Percentile with linear interpolation (same method as Excel PERCENTILE.INC).
@@ -647,7 +649,7 @@ function askName(t) {
   nameInput.focus();
   nameInput.select();
 }
-function saveRecord(name) {
+function saveRecord(name, open = true) {
   if (pendingTime === null) return;
   const s = statsFor(level.id);
   const entry = { name: (name || 'Player').trim().slice(0, 16) || 'Player', time: pendingTime, date: Date.now() };
@@ -658,11 +660,83 @@ function saveRecord(name) {
   saveData();
   pendingTime = null;
   highlight = { level: level.id, time: entry.time, date: entry.date };
-  openStats(level);
+  if (open) openStats(level);
 }
 $('nameForm').addEventListener('submit', () => saveRecord(nameInput.value));
 $('nameSkip').addEventListener('click', () => { nameDlg.close(); saveRecord(''); });
 nameDlg.addEventListener('cancel', e => { e.preventDefault(); });   // Esc does not lose the record
+
+/* =====================================================================
+   FAMILY RECORDS (Firebase, shared by all devices)
+   The module script at the end of the page sets window.msFamily when a
+   player is signed in: { player: {uid, code}, save(level, time), top(level) }.
+   Without it (offline, or sign-in not loaded) the game works as before,
+   with the name dialog and records on this device only.
+   ===================================================================== */
+const famCache = {};          // level id -> last loaded family top 10
+let famHighlight = null;      // document id of the record just saved
+
+async function recordWin(t) {
+  const fam = window.msFamily;
+  const s = statsFor(level.id);
+  const localTop = s.top.length < TOP_N || t < s.top[s.top.length - 1].time;
+  if (!fam) {
+    if (localTop) setTimeout(() => askName(t), 350);
+    return;
+  }
+  // Signed in: no name dialog. The local top 10 uses the player code.
+  if (localTop) { pendingTime = t; saveRecord(fam.player.code, false); }
+  const lid = level.id;
+  let famTop = false;
+  try {
+    famHighlight = await fam.save(lid, t);
+    famCache[lid] = await fam.top(lid);
+    famTop = famCache[lid].some(r => r.id === famHighlight);
+  } catch (e) {
+    console.error('[minesweeper] Family record not saved:', e);
+  }
+  if (localTop || famTop) setTimeout(() => openStats(level), 350);
+}
+
+async function renderFamily() {
+  const fam = window.msFamily, box = $('famBoard'), title = $('famTitle');
+  box.hidden = title.hidden = !fam;
+  if (!fam) return;
+  const lid = statsLevel.id;
+  if (famCache[lid]) drawFamily(famCache[lid]);
+  else box.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const list = await fam.top(lid);
+    famCache[lid] = list;
+    if (statsLevel.id === lid) drawFamily(list);
+  } catch (e) {
+    console.error('[minesweeper] Family times not loaded:', e);
+    if (statsLevel.id === lid && !famCache[lid]) box.innerHTML = '<div class="empty">Could not load the family times.</div>';
+  }
+}
+
+function drawFamily(list) {
+  const box = $('famBoard');
+  if (!list.length) { box.innerHTML = '<div class="empty">No family wins yet on this level.</div>'; return; }
+  const t = document.createElement('table');
+  t.innerHTML = '<thead><tr><th>#</th><th>Player</th><th class="r">Time</th><th class="r">Date</th></tr></thead>';
+  const tb = document.createElement('tbody');
+  list.forEach((e, i) => {
+    const tr = document.createElement('tr');
+    if (e.id === famHighlight) tr.className = 'new';
+    const medal = ['🥇', '🥈', '🥉'][i] || String(i + 1);
+    [medal, e.player, e.time.toFixed(1) + 's', e.date ? e.date.toLocaleDateString() : ''].forEach((v, k) => {
+      const td = document.createElement('td');
+      td.textContent = v;
+      if (k >= 2) td.className = 'r';
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.innerHTML = '';
+  box.appendChild(t);
+}
 
 /* =====================================================================
    START
@@ -671,6 +745,34 @@ faceEl.addEventListener('click', newGame);
 let resizeTimer;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(sizeCells, 100); });
 newGame();
+</script>
+
+<script type="module">
+// Family sign-in (see ../shared/family.js). Nobody signed in -> back to the menu.
+let family = null;
+try { family = await import('../shared/family.js'); }
+catch (e) { console.error('[minesweeper] Sign-in did not load:', e); }
+
+const who = document.getElementById('who');
+if (family) {
+  let player = null, err = null;
+  try { player = await family.currentPlayer(); } catch (e) { err = e; }
+  if (player) {
+    window.msFamily = {
+      player,
+      save: (lvl, time) => family.saveRecord('minesweeper', lvl, time),
+      top: lvl => family.topTimes('minesweeper', lvl, 10)
+    };
+    who.textContent = '· Playing as ' + player.code;
+  } else if (!err || err.message === 'no-player-record') {
+    location.replace('../');
+  } else {
+    console.error('[minesweeper] Player not loaded:', err);
+    who.textContent = '· Offline: times saved on this device only';
+  }
+} else {
+  who.textContent = '· Offline: times saved on this device only';
+}
 </script>
 </body>
 </html>

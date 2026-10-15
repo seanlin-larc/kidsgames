@@ -9,10 +9,13 @@ Brain-teasing games and puzzles for kids. Each game is a static web page. GitHub
 
 ```
 kidsgames/
-├── index.html         Game menu (entry point)
+├── index.html         Welcome page: player picker + PIN, then the game menu
 ├── README.md
 ├── .nojekyll          Tells GitHub Pages not to run Jekyll
-├── shared/            (Optional) Only when two or more games reuse code
+├── shared/
+│   └── family.js      Family sign-in (Firebase) and shared records, used by every page
+├── firebase/
+│   └── firestore.rules  Firestore security rules (copy into the Firebase console)
 └── minesweeper/
     └── index.html     The game
 ```
@@ -32,12 +35,28 @@ kidsgames/
 | Game        | Prefix |
 |-------------|--------|
 | minesweeper | `ms-` (data in `ms-v2`) |
+| welcome page | `kg-` (`kg-lastPlayer`) |
 
 ## Publish
 
 GitHub Pages settings: **Settings → Pages → Deploy from a branch → `main` / `(root)`**.
 Changes go live 1–2 minutes after a push.
 
+## Family sign-in
+
+- The welcome page asks who is playing (SL, CJ, YC, JY) and for a 6-digit PIN.
+- Firebase Authentication checks the PIN. No PIN is in this code.
+- Each game imports `../shared/family.js`. `currentPlayer()` gives the signed-in player.
+  `saveRecord(game, level, time)` and `topTimes(game, level)` use Firestore `games/{game}/{level}`.
+- A game that adds Firestore records needs a matching block in `firebase/firestore.rules`.
+
 ## Test locally
 
-Open `index.html` in a browser. No build step is necessary.
+Run a local web server in the repo folder, then open `http://localhost:8000/`:
+
+```
+python -m http.server 8000
+```
+
+Opening `index.html` from disk (`file://`) does not work: browsers block module scripts there,
+and the Firebase API key accepts only `seanlin-larc.github.io` and `localhost:8000`.

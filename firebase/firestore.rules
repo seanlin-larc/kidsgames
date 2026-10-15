@@ -1,0 +1,49 @@
+rules_version = '2';
+// Firestore security rules for Kids Games (project kidsgame-7a262).
+// Copy this whole file into Firebase console > Firestore > Rules, then click Publish.
+// Family-only: only the four accounts that have a players/{uid} document can read or write.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isFamily() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/players/$(request.auth.uid));
+    }
+    function playerCode() {
+      return get(/databases/$(database)/documents/players/$(request.auth.uid)).data.code;
+    }
+
+    // Fastest believable time (seconds) for each level. Faster times are rejected as fake.
+    function minTimeOk(level, t) {
+      return (level == 'l8'  && t >= 2)
+          || (level == 'l12' && t >= 5)
+          || (level == 'l16' && t >= 10)
+          || (level == 'l20' && t >= 20)
+          || (level == 'l24' && t >= 30);
+    }
+
+    // players/{uid} = { code: "SL" }. Sean edits these in the console only.
+    match /players/{uid} {
+      allow read: if isFamily();
+      allow write: if false;
+    }
+
+    // Minesweeper records: games/minesweeper/{level}/{recordId}
+    match /games/minesweeper/{level}/{recordId} {
+      allow read: if isFamily();
+      allow create: if isFamily()
+        && level in ['l8', 'l12', 'l16', 'l20', 'l24']
+        && request.resource.data.keys().hasOnly(['player', 'time', 'date', 'uid'])
+        && request.resource.data.keys().hasAll(['player', 'time', 'date', 'uid'])
+        && request.resource.data.player == playerCode()
+        && request.resource.data.time is number
+        && minTimeOk(level, request.resource.data.time)
+        && request.resource.data.time < 10000
+        && request.resource.data.date == request.time
+        && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Everything else stays locked.
+  }
+}
