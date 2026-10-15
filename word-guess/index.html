@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Word Guess · Kids Games</title>
+<style>
+:root{
+  --bg:#f3f4f6; --panel:#ffffff; --text:#1f2937; --muted:#6b7280; --line:#d1d5db;
+  --accent:#2563eb; --accent-text:#ffffff; --bad:#b91c1c;
+  --hit:#16a34a; --near:#ca8a04; --miss:#6b7280; --key:#e5e7eb; --tile-text:#ffffff;
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#111827; --panel:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --line:#374151;
+    --accent:#60a5fa; --accent-text:#0b1220; --bad:#f87171;
+    --hit:#15803d; --near:#a16207; --miss:#4b5563; --key:#374151;}
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  line-height:1.4;padding:12px 16px 24px;-webkit-user-select:none;user-select:none}
+main{max-width:520px;margin:0 auto}
+[hidden]{display:none !important}
+a{color:var(--accent)}
+
+/* ---------- top bar ---------- */
+.top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.top a{text-decoration:none;font-size:.95rem}
+.top h1{margin:0;font-size:1.4rem}
+#who{color:var(--muted);font-size:.9rem}
+
+/* ---------- controls ---------- */
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--panel)}
+.seg button{font:inherit;font-size:.95rem;padding:7px 12px;border:none;background:none;color:inherit;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-text);font-weight:700}
+.btn{font:inherit;font-size:.95rem;padding:7px 12px;border-radius:999px;border:1px solid var(--line);
+  background:var(--panel);color:inherit;cursor:pointer}
+.spacer{flex:1}
+#info{color:var(--muted);font-size:.9rem;margin:0 0 8px;min-height:1.3em}
+
+/* ---------- board ---------- */
+.board{--gap:6px;--book:40px;
+  /* tile size: fit the width, and fit 6 rows plus the keyboard in the screen height */
+  --t:min(56px, calc((min(100vw, 520px) - 32px - var(--book) - var(--n) * var(--gap)) / var(--n)),
+          calc((100vh - 400px) / 6 - var(--gap)));
+  display:grid;gap:var(--gap);justify-content:center;margin:6px 0 12px}
+.row{display:flex;gap:var(--gap);align-items:center}
+.row.shake{animation:shake .35s}
+@keyframes shake{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+.tile{width:var(--t);height:var(--t);display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:calc(var(--t) * .55);text-transform:uppercase;border:2px solid var(--line);
+  border-radius:6px;background:var(--panel)}
+.tile.filled{border-color:var(--muted)}
+.tile.given{border:2px dashed var(--hit);color:var(--hit)}
+.tile.hit{background:var(--hit);border-color:var(--hit);color:var(--tile-text)}
+.tile.near{background:var(--near);border-color:var(--near);color:var(--tile-text)}
+.tile.miss{background:var(--miss);border-color:var(--miss);color:var(--tile-text)}
+.book{width:var(--book);height:var(--book);display:flex;align-items:center;justify-content:center;
+  font-size:1.35rem;text-decoration:none;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+.book.off{visibility:hidden}
+
+/* ---------- message and end panel ---------- */
+#msg{min-height:1.5em;text-align:center;font-weight:600;margin:0 0 8px}
+#msg.bad{color:var(--bad)}
+#end{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin:0 0 12px;
+  text-align:center}
+#end p{margin:0 0 8px}
+#endWord{font-size:1.5rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+#endWord a.book{display:inline-flex;vertical-align:middle;letter-spacing:0;margin-left:10px}
+
+/* ---------- on-page keyboard (the only input) ---------- */
+.kb{display:grid;gap:6px;touch-action:manipulation}
+.kb .krow{display:flex;gap:5px;justify-content:center}
+.kb button{font:inherit;font-weight:700;font-size:1.05rem;flex:1;max-width:44px;height:52px;padding:0;
+  border:none;border-radius:6px;background:var(--key);color:inherit;cursor:pointer;text-transform:uppercase;
+  -webkit-tap-highlight-color:transparent}
+.kb button.wide{max-width:68px;flex:1.5;font-size:.8rem}
+.kb button:active{filter:brightness(.85)}
+.kb button.hit{background:var(--hit);color:var(--tile-text)}
+.kb button.near{background:var(--near);color:var(--tile-text)}
+.kb button.miss{background:var(--miss);color:var(--tile-text)}
+
+/* ---------- stats dialog ---------- */
+dialog{border:none;padding:0;background:var(--panel);color:var(--text);border-radius:12px;
+  width:min(440px, calc(100vw - 32px));max-height:calc(100vh - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.dhead{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.dhead h2{margin:0;font-size:1.15rem}
+.dbody{padding:12px 14px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}
+.card{border:1px solid var(--line);border-radius:8px;padding:6px;text-align:center}
+.card b{display:block;font-size:1.3rem}
+.card span{font-size:.72rem;color:var(--muted)}
+.dist{display:grid;grid-template-columns:16px 1fr;gap:4px 8px;align-items:center;font-size:.85rem}
+.bar{background:var(--miss);color:#fff;text-align:right;padding:1px 6px;border-radius:3px;min-width:22px;font-weight:700}
+.bar.now{background:var(--hit)}
+.note{font-size:.8rem;color:var(--muted);margin-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <a href="../">‹ Games</a>
+    <h1>Word Guess</h1>
+    <span id="who"></span>
+  </div>
+
+  <div class="controls">
+    <div class="seg" id="lenSeg" role="group" aria-label="Word length">
+      <button type="button" data-len="5">5</button>
+      <button type="button" data-len="6">6</button>
+      <button type="button" data-len="7">7</button>
+    </div>
+    <div class="seg" id="modeSeg" role="group" aria-label="Mode">
+      <button type="button" data-mode="daily">Today</button>
+      <button type="button" data-mode="practice">Practice</button>
+    </div>
+    <span class="spacer"></span>
+    <button type="button" class="btn" id="newBtn">New word</button>
+    <button type="button" class="btn" id="statsBtn">Stats</button>
+  </div>
+  <p id="info"></p>
+
+  <div class="board" id="board" aria-label="Guesses"></div>
+  <p id="msg" role="status" aria-live="polite"></p>
+
+  <div id="end" hidden>
+    <p id="endText"></p>
+    <p id="endWord"></p>
+    <p class="note" id="endNote"></p>
+  </div>
+
+  <div class="kb" id="kb" aria-label="Keyboard"></div>
+</main>
+
+<dialog id="statsDlg" aria-labelledby="statsTitle">
+  <div class="dhead">
+    <h2 id="statsTitle">Stats</h2>
+    <button type="button" class="btn" id="statsClose">Close</button>
+  </div>
+  <div class="dbody" id="statsBody"></div>
+</dialog>
+
+<script src="words.js"></script>
+<script type="module">
+/* ==========================================================
+   WORD GUESS
+   - 6 tries. 5, 6 or 7 letters. 6-letter words show 1 letter,
+     7-letter words show 2 letters, so the player always fills 5.
+   - Input is only the on-page keyboard (Sean's rule).
+   - "Today" = one word a day per length, same for the whole family.
+     "Practice" = a new random word each game.
+   - The book button opens the word in the Cambridge Dictionary.
+   ========================================================== */
+const TRIES = 6;
+const SHOWN = { 5: 0, 6: 1, 7: 2 };              // letters revealed at the start
+const STORE_KEY = 'wg-v1';                       // all saved data for this game
+const DAY0 = Date.UTC(2026, 0, 1);               // day 0 of the daily words
+// Inflected guesses ("boxes") open their dictionary entry ("box"); BASE is filled below.
+const dictUrl = w => 'https://dictionary.cambridge.org/dictionary/english/' + encodeURIComponent(BASE[w] || w);
+
+const $ = id => document.getElementById(id);
+const ANSWERS = {}, VALID = {}, BASE = {};
+for (const L of [5, 6, 7]) {
+  ANSWERS[L] = window.WG_WORDS.answers[L].split(' ');
+  VALID[L] = new Set(window.WG_WORDS.valid[L].split(' '));
+  for (const pair of window.WG_WORDS.base[L].split(' ')) { const [w, b] = pair.split(':'); if (b) BASE[w] = b; }
+}
+
+/* ---------- seeded random numbers (same on every device) ---------- */
+function rng(seed) {                              // mulberry32
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function shuffled(list, rand) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function pickPositions(L, count, rand) {
+  return shuffled([...Array(L).keys()], rand).slice(0, count).sort((a, b) => a - b);
+}
+// Local calendar day number. Everyone in the family sees the same word on the same date.
+function todayNumber() {
+  const d = new Date();
+  return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - DAY0) / 86400000);
+}
+// The daily order is a fixed shuffle of each list, so a word repeats only after the whole list.
+// Note: rebuilding words.js changes the daily words.
+const dailyOrder = {};
+function dailyGame(L, day) {
+  if (!dailyOrder[L]) dailyOrder[L] = shuffled(ANSWERS[L], rng(1000 + L));
+  const n = dailyOrder[L].length;
+  return { answer: dailyOrder[L][((day % n) + n) % n], shown: pickPositions(L, SHOWN[L], rng(day * 10 + L)) };
+}
+function practiceGame(L) {
+  const avoid = dailyGame(L, todayNumber()).answer;
+  let w; do { w = ANSWERS[L][Math.floor(Math.random() * ANSWERS[L].length)]; } while (w === avoid);
+  return { answer: w, shown: pickPositions(L, SHOWN[L], Math.random) };
+}
+
+/* ---------- scoring: 'hit' right place, 'near' wrong place, 'miss' not in word ---------- */
+function score(guess, answer) {
+  const res = Array(answer.length).fill('miss'), left = {};
+  for (let i = 0; i < answer.length; i++) {
+    if (guess[i] === answer[i]) res[i] = 'hit';
+    else left[answer[i]] = (left[answer[i]] || 0) + 1;
+  }
+  for (let i = 0; i < answer.length; i++) {
+    if (res[i] !== 'hit' && left[guess[i]] > 0) { res[i] = 'near'; left[guess[i]]--; }
+  }
+  return res;
+}
+
+/* ---------- saved data (localStorage, safe if blocked) ---------- */
+let data = (() => {
+  try { const d = JSON.parse(localStorage.getItem(STORE_KEY)); if (d && d.players) return d; } catch (e) {}
+  return { players: {}, last: { len: 5, mode: 'daily' } };
+})();
+function saveData() { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) {} }
+let profile = null;                                  // data.players[player code]
+function useProfile(code) {
+  if (!data.players[code]) data.players[code] = { games: {}, stats: {} };
+  profile = data.players[code];
+}
+function statsFor(key) {
+  if (!profile.stats[key]) profile.stats[key] = { played: 0, won: 0, streak: 0, best: 0, lastDay: null, dist: [0, 0, 0, 0, 0, 0] };
+  return profile.stats[key];
+}
+
+/* ---------- game state ---------- */
+let len = data.last.len || 5, mode = data.last.mode || 'daily';
+let game = null;       // { answer, shown, guesses: [], done, won, day? }
+let typed = [];        // letters typed into the hidden boxes of the current row
+const slotKey = () => mode + len;
+
+function loadGame() {
+  const key = slotKey(), saved = profile.games[key];
+  if (mode === 'daily') {
+    const day = todayNumber();
+    if (saved && saved.day === day) game = saved;
+    else game = Object.assign(dailyGame(len, day), { day, guesses: [], done: false, won: false });
+  } else {
+    game = (saved && !saved.done) ? saved : Object.assign(practiceGame(len), { guesses: [], done: false, won: false });
+  }
+  profile.games[key] = game;
+  typed = [];
+  data.last = { len, mode };
+  saveData();
+  render();
+}
+function newPractice() {
+  game = Object.assign(practiceGame(len), { guesses: [], done: false, won: false });
+  profile.games[slotKey()] = game; typed = []; saveData(); render();
+}
+
+const hiddenPositions = () => [...Array(len).keys()].filter(i => !game.shown.includes(i));
+
+function currentWord() {                    // the full word in the current row, or null if not full
+  const hid = hiddenPositions();
+  if (typed.length < hid.length) return null;
+  const w = Array(len);
+  game.shown.forEach(i => { w[i] = game.answer[i]; });
+  hid.forEach((p, k) => { w[p] = typed[k]; });
+  return w.join('');
+}
+
+/* ---------- input (on-page keyboard only) ---------- */
+function press(k) {
+  if (!game || game.done) return;
+  const hid = hiddenPositions();
+  if (k === 'enter') return submit();
+  if (k === 'back') { typed.pop(); setMsg(''); return renderBoard(); }
+  if (typed.length < hid.length) { typed.push(k); renderBoard(); }
+}
+function submit() {
+  const w = currentWord();
+  if (!w) return fail('Fill all ' + hiddenPositions().length + ' letters.');
+  if (!VALID[len].has(w)) return fail('"' + w.toUpperCase() + '" is not in the word list.');
+  game.guesses.push(w);
+  typed = [];
+  if (w === game.answer || game.guesses.length >= TRIES) finish(w === game.answer);
+  saveData();
+  setMsg('');
+  render();
+}
+function fail(text) {
+  setMsg(text, true);
+  const row = $('board').children[game.guesses.length];
+  if (row) { row.classList.remove('shake'); void row.offsetWidth; row.classList.add('shake'); }
+}
+function finish(won) {
+  game.done = true; game.won = won;
+  const s = statsFor(slotKey());
+  s.played++;
+  if (won) { s.won++; s.dist[game.guesses.length - 1]++; }
+  if (mode === 'daily') {
+    s.streak = won ? ((s.lastDay === game.day - 1) ? s.streak + 1 : 1) : 0;
+    s.best = Math.max(s.best, s.streak);
+    s.lastDay = game.day;
+  }
+}
+
+/* ---------- drawing ---------- */
+function setMsg(text, bad) { $('msg').textContent = text; $('msg').className = bad ? 'bad' : ''; }
+
+function bookLink(word) {
+  const a = document.createElement('a');
+  a.className = 'book'; a.href = dictUrl(word); a.target = '_blank'; a.rel = 'noopener';
+  a.textContent = '📖';
+  a.title = 'Look up "' + word + '" in the Cambridge Dictionary';
+  a.setAttribute('aria-label', a.title);
+  return a;
+}
+
+function renderBoard() {
+  const board = $('board');
+  board.style.setProperty('--n', len);
+  board.textContent = '';
+  for (let r = 0; r < TRIES; r++) {
+    const row = document.createElement('div'); row.className = 'row';
+    const done = game.guesses[r], isNow = (r === game.guesses.length && !game.done);
+    const marks = done ? score(done, game.answer) : null;
+    const hid = hiddenPositions();
+    for (let i = 0; i < len; i++) {
+      const t = document.createElement('div'); t.className = 'tile';
+      if (done) { t.textContent = done[i]; t.classList.add(marks[i]); }
+      else if (isNow && game.shown.includes(i)) { t.textContent = game.answer[i]; t.classList.add('given'); }
+      else if (isNow) { const k = hid.indexOf(i); if (typed[k]) { t.textContent = typed[k]; t.classList.add('filled'); } }
+      else if (game.shown.includes(i)) { t.classList.add('given'); }
+      row.appendChild(t);
+    }
+    if (done) row.appendChild(bookLink(done));
+    else { const b = document.createElement('span'); b.className = 'book off'; row.appendChild(b); }
+    board.appendChild(row);
+  }
+}
+
+function renderKeys() {
+  // Key colours come from the hidden boxes only. The given letters are always green,
+  // so they tell nothing new about the keys.
+  const best = {}, rank = { miss: 1, near: 2, hit: 3 };
+  game.guesses.forEach(g => {
+    const m = score(g, game.answer);
+    for (let i = 0; i < len; i++) {
+      if (game.shown.includes(i)) continue;
+      if (!best[g[i]] || rank[m[i]] > rank[best[g[i]]]) best[g[i]] = m[i];
+    }
+  });
+  document.querySelectorAll('#kb button[data-k]').forEach(b => {
+    b.classList.remove('hit', 'near', 'miss');
+    if (best[b.dataset.k]) b.classList.add(best[b.dataset.k]);
+  });
+}
+
+function renderEnd() {
+  $('end').hidden = !game.done;
+  $('newBtn').hidden = (mode === 'daily');
+  if (!game.done) return;
+  const n = game.guesses.length;
+  $('endText').textContent = game.won
+    ? (n === 1 ? 'Wow! First try!' : 'You got it in ' + n + ' tries!')
+    : 'Out of tries. The word was:';
+  const w = $('endWord'); w.textContent = game.answer; w.appendChild(bookLink(game.answer));
+  $('endNote').textContent = mode === 'daily'
+    ? 'A new ' + len + '-letter word comes tomorrow. Try Practice for more words.'
+    : 'Tap "New word" to play again.';
+}
+
+function render() {
+  document.querySelectorAll('#lenSeg button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.len === len)));
+  document.querySelectorAll('#modeSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  const shown = SHOWN[len];
+  $('info').textContent = (mode === 'daily' ? "Today's " : 'Practice · ') + len + '-letter word · ' +
+    (shown ? shown + (shown === 1 ? ' letter' : ' letters') + ' shown · ' : '') + 'guess 5 letters in 6 tries';
+  renderBoard(); renderKeys(); renderEnd();
+}
+
+/* ---------- stats window ---------- */
+function showStats() {
+  const s = statsFor(slotKey());
+  const today = todayNumber();
+  const streak = (mode === 'daily' && s.lastDay !== null && s.lastDay < today - 1) ? 0 : s.streak;
+  const pct = s.played ? Math.round(100 * s.won / s.played) : 0;
+  const max = Math.max(1, ...s.dist);
+  const nowRow = (game.done && game.won) ? game.guesses.length - 1 : -1;
+  let html = '<b>' + len + ' letters · ' + (mode === 'daily' ? 'Today' : 'Practice') + '</b>' +
+    '<div class="cards">' +
+    card(s.played, 'Played') + card(pct + '%', 'Won') +
+    (mode === 'daily' ? card(streak, 'Streak') + card(s.best, 'Best streak') : card(s.won, 'Wins') + card('', '')) +
+    '</div><div class="dist">';
+  s.dist.forEach((c, i) => {
+    html += '<span>' + (i + 1) + '</span><div><div class="bar' + (i === nowRow ? ' now' : '') +
+      '" style="width:' + Math.max(8, Math.round(100 * c / max)) + '%">' + c + '</div></div>';
+  });
+  html += '</div><p class="note">Number of tries for each win. Stats are saved on this device, for each player.</p>';
+  $('statsBody').innerHTML = html;
+  $('statsDlg').showModal();
+}
+const card = (v, t) => '<div class="card"><b>' + v + '</b><span>' + t + '</span></div>';
+
+/* ---------- build the keyboard ---------- */
+const ROWS = ['qwertyuiop', 'asdfghjkl', '>zxcvbnm<'];
+ROWS.forEach(r => {
+  const row = document.createElement('div'); row.className = 'krow';
+  for (const ch of r) {
+    const b = document.createElement('button'); b.type = 'button'; b.tabIndex = -1;
+    if (ch === '>') { b.textContent = 'Enter'; b.className = 'wide'; b.dataset.act = 'enter'; }
+    else if (ch === '<') { b.textContent = '⌫'; b.className = 'wide'; b.dataset.act = 'back'; b.setAttribute('aria-label', 'Delete'); }
+    else { b.textContent = ch; b.dataset.k = ch; }
+    row.appendChild(b);
+  }
+  $('kb').appendChild(row);
+});
+$('kb').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (e.detail === 0) return;                 // a click made by a physical key (Enter/Space), not a tap or mouse
+  press(b.dataset.act || b.dataset.k);
+});
+// No physical keyboard input: the game has no text fields and ignores key presses.
+['keydown', 'keyup'].forEach(t => document.addEventListener(t, e => {
+  if (e.target.closest && e.target.closest('#kb')) e.preventDefault();
+}, true));
+
+$('lenSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { len = +b.dataset.len; setMsg(''); loadGame(); } });
+$('modeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { mode = b.dataset.mode; setMsg(''); loadGame(); } });
+$('newBtn').addEventListener('click', () => { setMsg(''); newPractice(); });
+$('statsBtn').addEventListener('click', showStats);
+$('statsClose').addEventListener('click', () => $('statsDlg').close());
+
+/* ---------- family sign-in (see ../shared/family.js). Nobody signed in -> back to the menu ---------- */
+async function start() {
+  let family = null, player = null, err = null;
+  try { family = await import('../shared/family.js'); }
+  catch (e) { console.error('[word-guess] Sign-in did not load:', e); }
+  if (family) {
+    try {
+      player = await Promise.race([family.currentPlayer(),
+        new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 6000))]);
+    } catch (e) { err = e; }
+    if (!player && (!err || err.message === 'no-player-record')) { location.replace('../'); return; }
+  }
+  if (player) { useProfile(player.code); $('who').textContent = '· Playing as ' + player.code; }
+  else { useProfile('device'); $('who').textContent = '· Offline: stats saved on this device only'; }
+  loadGame();
+}
+
+// Test hooks for build checks (not used by the game).
+window.wgTest = { score, dailyGame, practiceGame, todayNumber, VALID, ANSWERS };
+start();
+</script>
+</body>
+</html>

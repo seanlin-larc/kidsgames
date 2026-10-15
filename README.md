@@ -4,6 +4,7 @@ Brain-teasing games and puzzles for kids. Each game is a static web page. GitHub
 
 - Site: https://seanlin-larc.github.io/kidsgames/
 - Minesweeper: https://seanlin-larc.github.io/kidsgames/minesweeper/
+- Word Guess: https://seanlin-larc.github.io/kidsgames/word-guess/
 
 ## Folder structure
 
@@ -16,8 +17,13 @@ kidsgames/
 │   └── family.js      Family sign-in (Firebase) and shared records, used by every page
 ├── firebase/
 │   └── firestore.rules  Firestore security rules (copy into the Firebase console)
-└── minesweeper/
-    └── index.html     The game
+├── minesweeper/
+│   └── index.html     The game
+└── word-guess/
+    ├── index.html     The game
+    ├── words.js       Word lists (made by build-words.py, do not edit by hand)
+    ├── build-words.py Makes words.js from public word-frequency data
+    └── blocklist.txt  Words never used as answers or accepted as guesses
 ```
 
 ## Rules for a new game
@@ -35,6 +41,7 @@ kidsgames/
 | Game        | Prefix |
 |-------------|--------|
 | minesweeper | `ms-` (data in `ms-v2`) |
+| word-guess  | `wg-` (data in `wg-v1`) |
 | welcome page | `kg-` (`kg-lastPlayer`) |
 
 ## Publish
