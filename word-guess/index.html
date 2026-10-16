@@ -28,6 +28,7 @@ a{color:var(--accent)}
 .top a{text-decoration:none;font-size:.95rem}
 .top h1{margin:0;font-size:1.4rem}
 #who{color:var(--muted);font-size:.9rem}
+.kg-wait main > :not(.top){visibility:hidden}   /* shown after the sign-in check (../shared/gate.js) */
 
 /* ---------- controls ---------- */
 .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
@@ -98,12 +99,12 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .note{font-size:.8rem;color:var(--muted);margin-top:10px}
 </style>
 </head>
-<body>
+<body class="kg-wait">
 <main>
   <div class="top">
     <a href="../">‹ Games</a>
     <h1>Word Guess</h1>
-    <span id="who"></span>
+    <span id="who">Checking sign-in…</span>
   </div>
 
   <div class="controls">
@@ -304,6 +305,8 @@ function finish(won) {
     s.best = Math.max(s.best, s.streak);
     s.lastDay = game.day;
   }
+  // Log the finished game for this player (device outbox, then Firestore). score = number of guesses.
+  if (window.wgCtx) wgCtx.logResult('word-guess', slotKey(), won, game.guesses.length);
 }
 
 /* ---------- drawing ---------- */
@@ -433,20 +436,18 @@ $('newBtn').addEventListener('click', () => { setMsg(''); newPractice(); });
 $('statsBtn').addEventListener('click', showStats);
 $('statsClose').addEventListener('click', () => $('statsDlg').close());
 
-/* ---------- family sign-in (see ../shared/family.js). Nobody signed in -> back to the menu ---------- */
+/* ---------- sign-in gate (see ../shared/gate.js) ----------
+   Play only when signed in, or offline with a check-out. Nobody may play -> back to the menu.
+   The bar shows the player, offline icon, check-out and sign-out. */
 async function start() {
-  let family = null, player = null, err = null;
-  try { family = await import('../shared/family.js'); }
-  catch (e) { console.error('[word-guess] Sign-in did not load:', e); }
-  if (family) {
-    try {
-      player = await Promise.race([family.currentPlayer(),
-        new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 6000))]);
-    } catch (e) { err = e; }
-    if (!player && (!err || err.message === 'no-player-record')) { location.replace('../'); return; }
-  }
-  if (player) { useProfile(player.code); $('who').textContent = '· Playing as ' + player.code; }
-  else { useProfile('device'); $('who').textContent = '· Offline: stats saved on this device only'; }
+  let gate = null;
+  try { gate = await import('../shared/gate.js'); }
+  catch (e) { console.error('[word-guess] Sign-in check did not load:', e); }
+  if (!gate) { $('who').textContent = 'Cannot check sign-in. Go back to the games menu.'; return; }
+  const ctx = await gate.enterGame({ bar: $('who') });
+  if (!ctx) return;
+  window.wgCtx = ctx;
+  useProfile(ctx.player.code);
   loadGame();
 }
 

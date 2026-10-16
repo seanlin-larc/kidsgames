@@ -23,6 +23,7 @@ body{margin:0;background:var(--page);color:var(--text);
 a.back{display:inline-block;color:#fff;text-decoration:none;font-size:.95rem;margin:0 0 8px 4px}
 a.back:hover{text-decoration:underline}
 .who{color:#fff;font-size:.95rem;margin-left:10px;opacity:.95}
+.kg-wait #game{visibility:hidden}   /* shown after the sign-in check (../shared/gate.js) */
 
 /* ---------- classic raised window ---------- */
 .game{width:max-content;max-width:100%;margin:0 auto;background:var(--face);padding:6px;
@@ -121,8 +122,8 @@ tr.new td{background:rgba(255,215,0,.28);font-weight:700}
 .row button.primary{background:#000080;border-color:#000080;color:#fff}
 </style>
 </head>
-<body>
-<a class="back" href="../">← All games</a><span class="who" id="who"></span>
+<body class="kg-wait">
+<a class="back" href="../">← All games</a><span class="who" id="who">Checking sign-in…</span>
 
 <div class="game" id="game">
   <div class="top sunk">
@@ -348,6 +349,7 @@ function lose(hit) {
   });
   hit.el.classList.add('boom');
   faceEl.textContent = '😵';
+  if (window.msFamily) msFamily.result(level.id, false, Math.round(elapsed() * 10) / 10);
 }
 
 function win() {
@@ -364,6 +366,7 @@ function win() {
   s.times.push(t);
   saveData();
 
+  if (window.msFamily) msFamily.result(level.id, true, t);
   recordWin(t);
 }
 
@@ -729,12 +732,15 @@ async function recordWin(t) {
   if (localTop) { pendingTime = t; saveRecord(fam.player.code, false); }
   const lid = level.id;
   let famTop = false;
-  try {
-    famHighlight = await fam.save(lid, t);
-    famCache[lid] = await fam.top(lid);
-    famTop = famCache[lid].some(r => r.id === famHighlight);
-  } catch (e) {
-    console.error('[minesweeper] Family record not saved:', e);
+  // The win goes to the device outbox first; save() resolves to its id once it is in Firestore.
+  famHighlight = await fam.save(lid, t).catch(e => { console.error('[minesweeper] Family record not saved:', e); return null; });
+  if (famHighlight && fam.online()) {
+    try {
+      famCache[lid] = await fam.top(lid);
+      famTop = famCache[lid].some(r => r.id === famHighlight);
+    } catch (e) {
+      console.error('[minesweeper] Family times not loaded:', e);
+    }
   }
   if (localTop || famTop) setTimeout(() => openStats(level), 350);
 }
@@ -751,8 +757,11 @@ async function renderFamily() {
     famCache[lid] = list;
     if (statsLevel.id === lid) drawFamily(list);
   } catch (e) {
-    console.error('[minesweeper] Family times not loaded:', e);
-    if (statsLevel.id === lid && !famCache[lid]) box.innerHTML = '<div class="empty">Could not load the family times.</div>';
+    if (statsLevel.id === lid && !famCache[lid]) {
+      box.innerHTML = fam.online() ? '<div class="empty">Could not load the family times.</div>'
+                                   : '<div class="empty">Offline: family times show when you are online.</div>';
+    }
+    if (fam.online()) console.error('[minesweeper] Family times not loaded:', e);
   }
 }
 
@@ -789,30 +798,18 @@ newGame();
 </script>
 
 <script type="module">
-// Family sign-in (see ../shared/family.js). Nobody signed in -> back to the menu.
-let family = null;
-try { family = await import('../shared/family.js'); }
-catch (e) { console.error('[minesweeper] Sign-in did not load:', e); }
-
-const who = document.getElementById('who');
-if (family) {
-  let player = null, err = null;
-  try { player = await family.currentPlayer(); } catch (e) { err = e; }
-  if (player) {
-    window.msFamily = {
-      player,
-      save: (lvl, time) => family.saveRecord('minesweeper', lvl, time),
-      top: lvl => family.topTimes('minesweeper', lvl, 10)
-    };
-    who.textContent = '· Playing as ' + player.code;
-  } else if (!err || err.message === 'no-player-record') {
-    location.replace('../');
-  } else {
-    console.error('[minesweeper] Player not loaded:', err);
-    who.textContent = '· Offline: times saved on this device only';
-  }
-} else {
-  who.textContent = '· Offline: times saved on this device only';
+// Sign-in gate (see ../shared/gate.js). Play only when signed in, or offline with a check-out.
+// Nobody may play -> back to the menu. The bar shows the player, offline icon, check-out and sign-out.
+const gate = await import('../shared/gate.js');
+const ctx = await gate.enterGame({ bar: document.getElementById('who') });
+if (ctx) {
+  window.msFamily = {
+    get player() { return ctx.player; },
+    online: () => ctx.online(),
+    save: (lvl, time) => ctx.saveWin('minesweeper', lvl, time),
+    top: lvl => ctx.topTimes('minesweeper', lvl, 10),
+    result: (lvl, won, time) => ctx.logResult('minesweeper', lvl, won, time)
+  };
 }
 </script>
 </body>

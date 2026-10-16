@@ -1,7 +1,8 @@
 rules_version = '2';
 // Firestore security rules for Kids Games (project kidsgame-7a262).
 // Copy this whole file into Firebase console > Firestore > Rules, then click Publish.
-// Family-only: only the four accounts that have a players/{uid} document can read or write.
+// Family-only: only the accounts that have a players/{uid} document (SL, CJ, YC, JY, Guest)
+// can read or write.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -22,6 +23,14 @@ service cloud.firestore {
           || (level == 'l24' && t >= 30);
     }
 
+    // playedAt = when the game was played on the device (it can be sent later, after offline play).
+    // It must be a timestamp from the last 30 days, and not more than 1 day ahead (device clocks vary).
+    function playedAtOk(d) {
+      return d.playedAt is timestamp
+        && d.playedAt <= request.time + duration.value(1, 'd')
+        && d.playedAt >= request.time - duration.value(30, 'd');
+    }
+
     // players/{uid} = { code: "SL" }. Sean edits these in the console only.
     match /players/{uid} {
       allow read: if isFamily();
@@ -33,14 +42,36 @@ service cloud.firestore {
       allow read: if isFamily();
       allow create: if isFamily()
         && level in ['l8', 'l12', 'l16', 'l20', 'l24']
-        && request.resource.data.keys().hasOnly(['player', 'time', 'date', 'uid'])
+        && request.resource.data.keys().hasOnly(['player', 'time', 'date', 'uid', 'playedAt'])
         && request.resource.data.keys().hasAll(['player', 'time', 'date', 'uid'])
+        && (!('playedAt' in request.resource.data) || playedAtOk(request.resource.data))
         && request.resource.data.player == playerCode()
         && request.resource.data.time is number
         && minTimeOk(level, request.resource.data.time)
         && request.resource.data.time < 10000
         && request.resource.data.date == request.time
         && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Every finished game (won or lost), for statistics for each player: results/{recordId}
+    // score = seconds (Minesweeper) or number of guesses (Word Guess).
+    match /results/{recordId} {
+      allow read: if isFamily();
+      allow create: if isFamily()
+        && request.resource.data.keys().hasOnly(['uid', 'player', 'game', 'level', 'won', 'score', 'playedAt', 'date'])
+        && request.resource.data.keys().hasAll(['uid', 'player', 'game', 'level', 'won', 'score', 'playedAt', 'date'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.player == playerCode()
+        && request.resource.data.game in ['minesweeper', 'word-guess']
+        && request.resource.data.level is string
+        && request.resource.data.level.size() <= 20
+        && request.resource.data.won is bool
+        && request.resource.data.score is number
+        && request.resource.data.score >= 0
+        && request.resource.data.score < 100000
+        && request.resource.data.date == request.time
+        && playedAtOk(request.resource.data);
       allow update, delete: if false;
     }
 

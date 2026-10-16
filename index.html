@@ -25,8 +25,8 @@ footer{margin-top:28px;font-size:.85rem;color:var(--muted)}
 /* ---------- sign-in card ---------- */
 .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 16px;max-width:360px;margin:0 auto}
 .card h2{margin:0 0 14px;font-size:1.25rem;text-align:center}
-.players{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px}
-.players button{font:inherit;font-size:1.25rem;font-weight:700;letter-spacing:.04em;height:56px;border-radius:12px;
+.players{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:18px}
+.players button{font:inherit;font-size:1.1rem;font-weight:700;letter-spacing:.04em;height:56px;border-radius:12px;
   border:2px solid var(--line);background:none;color:inherit;cursor:pointer}
 .players button[aria-checked="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
 .players button:focus-visible,.pad button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
@@ -46,9 +46,7 @@ footer{margin-top:28px;font-size:.85rem;color:var(--muted)}
 .pad button:disabled,.players button:disabled{opacity:.45;cursor:default}
 
 /* ---------- signed-in bar ---------- */
-.who{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 16px}
-.who b{font-size:1.1rem}
-.who button{font:inherit;font-size:.9rem;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:inherit;cursor:pointer}
+.who{margin:0 0 16px}
 .warn{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--bad);border-radius:0;padding:10px 12px;margin:0 0 16px;font-size:.95rem}
 </style>
 </head>
@@ -59,9 +57,11 @@ footer{margin-top:28px;font-size:.85rem;color:var(--muted)}
 
   <p id="loading" class="msg">Loading…</p>
 
-  <!-- Step 1: pick a player and type the PIN -->
+  <!-- Step 1: pick a player and type the PIN (sign-in needs internet) -->
   <section id="signin" class="card" hidden aria-labelledby="signinTitle">
     <h2 id="signinTitle">Who is playing?</h2>
+    <p class="warn" id="noNet" hidden>⚠️ No internet. Sign-in needs internet.
+      To play without internet, sign in first and tap <b>📥 Check out</b> (48 hours).</p>
     <div class="players" id="players" role="radiogroup" aria-label="Player"></div>
     <div class="dots" id="dots" aria-hidden="true"></div>
     <p class="msg" id="msg" role="status" aria-live="polite">Pick your name, then type your PIN.</p>
@@ -70,12 +70,7 @@ footer{margin-top:28px;font-size:.85rem;color:var(--muted)}
 
   <!-- Step 2: the games -->
   <section id="games" hidden>
-    <div class="who" id="who" hidden>
-      <span>Playing as <b id="whoCode"></b></span>
-      <button type="button" id="switchBtn">Switch player</button>
-    </div>
-    <div class="warn" id="offline" hidden>Sign-in is not available right now (no internet?).
-      You can still play. Times are saved only on this device.</div>
+    <div class="who" id="who"></div>
 
     <!--
       TO ADD A GAME:
@@ -83,6 +78,7 @@ footer{margin-top:28px;font-size:.85rem;color:var(--muted)}
       2. Put the game in word-ladder/index.html
       3. Copy one <li> block below and change the link, name, and text.
       Use relative links only (href="word-ladder/"), never href="/word-ladder/".
+      4. Add the folder to PRECACHE in sw.js, so the game works offline after a check-out.
     -->
     <ul>
       <li>
@@ -106,37 +102,25 @@ footer{margin-top:28px;font-size:.85rem;color:var(--muted)}
 </main>
 
 <script type="module">
+import * as S from './shared/session.js';
+import * as gate from './shared/gate.js';
+
 const PIN_LENGTH = 6;
 const LAST_KEY = 'kg-lastPlayer';      // remembers the last player button on this device
 const $ = id => document.getElementById(id);
-let selected = null, pin = '', busy = false;   // sign-in state (declared before the awaits below)
-
-let family = null;
-try {
-  family = await import('./shared/family.js');
-} catch (e) {
-  console.error('[kidsgames] Sign-in did not load:', e);
-}
+let selected = null, pin = '', busy = false;
+let state = null;
 
 function show(id) {
   ['loading', 'signin', 'games'].forEach(x => { $(x).hidden = (x !== id); });
 }
 
-/* ---------- no sign-in available: show the games with a warning ---------- */
-if (!family) {
-  $('offline').hidden = false;
-  show('games');
-} else {
-  let player = null, err = null;
-  try { player = await family.currentPlayer(); } catch (e) { err = e; console.error('[kidsgames]', e); }
-  if (player) showGames(player);
-  else if (err && err.message !== 'no-player-record') { $('offline').hidden = false; show('games'); }
-  else showSignIn();
-}
+state = await gate.access();
+if (state.mode === 'online' || state.mode === 'checkout') showGames();
+else showSignIn();
 
-function showGames(player) {
-  $('whoCode').textContent = player.code;
-  $('who').hidden = false;
+function showGames() {
+  gate.mountBar($('who'), state, { onSignOut: () => { state = { mode: 'signed-out', family: state.family }; showSignIn(); } });
   show('games');
 }
 
@@ -144,10 +128,11 @@ function showGames(player) {
 function showSignIn() {
   buildPlayers();
   buildPad();
+  $('noNet').hidden = state.mode !== 'offline';
   selected = null;
   let last = null;
   try { last = localStorage.getItem(LAST_KEY); } catch (e) {}
-  if (family.PLAYERS.some(p => p.code === last)) selectPlayer(last);
+  if (S.PLAYERS.some(p => p.code === last)) selectPlayer(last);
   else setMsg('Pick your name, then type your PIN.');
   pin = '';
   drawDots();
@@ -157,7 +142,7 @@ function showSignIn() {
 function buildPlayers() {
   const box = $('players');
   box.innerHTML = '';
-  family.PLAYERS.forEach(p => {
+  S.PLAYERS.forEach(p => {
     const b = document.createElement('button');
     b.type = 'button';
     b.setAttribute('role', 'radio');
@@ -169,6 +154,13 @@ function buildPlayers() {
   });
 }
 
+function lockText(code) {
+  const st = S.lockState(code);
+  if (!st.locked) return null;
+  const min = Math.max(1, Math.ceil((st.until - Date.now()) / 60000));
+  return code + ' is locked for ' + min + ' more minute' + (min === 1 ? '' : 's') + ' (' + S.LOCK_FAILS + ' wrong PINs).';
+}
+
 function selectPlayer(code) {
   selected = code;
   document.querySelectorAll('#players button').forEach(b => {
@@ -176,8 +168,18 @@ function selectPlayer(code) {
   });
   pin = '';
   drawDots();
-  setMsg('Hi ' + code + '! Type your PIN.');
+  const lt = lockText(code);
+  if (lt) setMsg(lt, true);
+  else setMsg('Hi ' + code + '! Type your PIN.');
 }
+
+// Updates the lock message while a locked player is selected.
+setInterval(() => {
+  if ($('signin').hidden || !selected || busy) return;
+  const lt = lockText(selected);
+  if (lt) setMsg(lt, true);
+  else if ($('msg').classList.contains('bad') && /locked/.test($('msg').textContent)) setMsg('Hi ' + selected + '! Type your PIN.');
+}, 20000);
 
 function buildPad() {
   const pad = $('pad');
@@ -215,6 +217,8 @@ function press(k) {
   if (k === 'clear') { pin = ''; drawDots(); return; }
   if (k === 'back') { pin = pin.slice(0, -1); drawDots(); return; }
   if (!selected) { setMsg('Pick your name first.', true); return; }
+  const lt = lockText(selected);
+  if (lt) { pin = ''; drawDots(); setMsg(lt, true); return; }
   if (pin.length >= PIN_LENGTH) return;
   pin += k;
   drawDots();
@@ -229,22 +233,39 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Escape') { press('clear'); }
 });
 
+const WRONG_PIN = ['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-login-credentials'];
+
 async function submit() {
+  const code = selected;
   setBusy(true);
   setMsg('Checking…');
   try {
-    const player = await family.signIn(selected, pin);
-    try { localStorage.setItem(LAST_KEY, selected); } catch (e) {}
+    const family = state.family || await gate.loadFamily();
+    if (!family) throw Object.assign(new Error('no-firebase'), { code: 'auth/network-request-failed' });
+    const player = await family.signIn(code, pin);
+    S.recordSuccess(code);
+    try { localStorage.setItem(LAST_KEY, code); } catch (e) {}
     pin = '';
-    showGames(player);
+    family.flushOutbox().catch(() => {});
+    state = { mode: 'online', family, player, checkout: S.getCheckout() };
+    showGames();
   } catch (e) {
     console.error('[kidsgames] Sign-in failed:', e && e.code, e);
     pin = '';
     drawDots();
     const dots = $('dots');
     dots.classList.remove('shake'); void dots.offsetWidth; dots.classList.add('shake');
-    setMsg(messageFor(e), true);
-    if (e && e.message === 'no-player-record') await family.signOutPlayer().catch(() => {});
+    let text = messageFor(e);
+    if (e && WRONG_PIN.includes(e.code)) {
+      const st = S.recordFail(code);
+      text = st.locked ? lockText(code)
+        : 'Wrong PIN. ' + st.left + ' ' + (st.left === 1 ? 'try' : 'tries') + ' left before a ' + S.LOCK_MINUTES + '-minute lock.';
+    }
+    setMsg(text, true);
+    if (e && e.message === 'no-player-record') {
+      const family = state.family || await gate.loadFamily();
+      if (family) await family.signOutPlayer().catch(() => {});
+    }
   } finally {
     setBusy(false);
   }
@@ -253,20 +274,10 @@ async function submit() {
 function messageFor(e) {
   const code = (e && e.code) || '';
   if (e && e.message === 'no-player-record') return 'This player is not set up yet. Ask a grown-up.';
-  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' ||
-      code === 'auth/user-not-found' || code === 'auth/invalid-login-credentials') return 'Wrong PIN. Try again.';
   if (code === 'auth/too-many-requests') return 'Too many tries. Wait a few minutes, then try again.';
-  if (code === 'auth/network-request-failed') return 'No internet connection. Try again.';
+  if (code === 'auth/network-request-failed' || code === 'app/timeout') return 'No internet connection. Sign-in needs internet.';
   return 'Sign-in did not work. Try again.';
 }
-
-$('switchBtn').addEventListener('click', async () => {
-  $('switchBtn').disabled = true;
-  try { await family.signOutPlayer(); } catch (e) { console.error('[kidsgames]', e); }
-  $('switchBtn').disabled = false;
-  $('who').hidden = true;
-  showSignIn();
-});
 </script>
 </body>
 </html>
