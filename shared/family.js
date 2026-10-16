@@ -63,7 +63,16 @@ export async function currentPlayer() {
   const user = auth.currentUser;
   if (!user) return null;
   if (cachedPlayer && cachedPlayer.uid === user.uid) return cachedPlayer;
-  const snap = await getDoc(doc(db, "players", user.uid));
+  let snap;
+  try { snap = await getDoc(doc(db, "players", user.uid)); }
+  catch (e) {
+    // The rules refuse the read when the account has no players/{uid} document,
+    // and Firebase refuses a session of a deleted account. Both mean: not a family player.
+    if (e && (e.code === "permission-denied" || /^auth\/(user-token-expired|user-not-found|user-disabled|invalid-user-token)$/.test(e.code || ""))) {
+      throw new Error("no-player-record");
+    }
+    throw e;
+  }
   if (!snap.exists() || typeof snap.data().code !== "string") {
     throw new Error("no-player-record");
   }
