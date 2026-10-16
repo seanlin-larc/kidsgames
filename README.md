@@ -47,7 +47,7 @@ kidsgames/
 | Game        | Prefix |
 |-------------|--------|
 | minesweeper | `ms-` (data in `ms-v2`) |
-| word-guess  | `wg-` (data in `wg-v1`) |
+| word-guess  | `wg-` (data in `wg-v1`, colour theme in `wg-theme`) |
 | site (shared) | `kg-` (`kg-lastPlayer`, `kg-checkout`, `kg-lock`, `kg-outbox`) |
 
 ## Publish

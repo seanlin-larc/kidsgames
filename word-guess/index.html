@@ -4,17 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Word Guess · Kids Games</title>
+<script>
+/* Theme: 'auto' (follow the device), 'dark' or 'light'. Saved in localStorage 'wg-theme'.
+   Set here, before the page draws, so the page does not flash the wrong colours. */
+try { const t = localStorage.getItem('wg-theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <style>
+/* Light colours are the default. Dark colours apply when the theme is 'dark',
+   or when it is 'auto' (no data-theme) and the device is in dark mode.
+   The two dark blocks below must stay the same. */
 :root{
+  color-scheme:light;
   --bg:#f3f4f6; --panel:#ffffff; --text:#1f2937; --muted:#6b7280; --line:#d1d5db;
   --accent:#2563eb; --accent-text:#ffffff; --bad:#b91c1c;
-  --hit:#16a34a; --near:#ca8a04; --miss:#6b7280; --key:#e5e7eb; --tile-text:#ffffff;
+  --hit:#16a34a; --near:#ca8a04; --miss:#6b7280; --key:#e5e7eb; --tile-text:#ffffff; --given:#16a34a;
+  --key-miss:#6b7280; --key-miss-text:#ffffff;   /* keyboard keys of letters not in the word */
 }
 @media (prefers-color-scheme: dark){
-  :root{--bg:#111827; --panel:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --line:#374151;
+  :root:not([data-theme="light"]){color-scheme:dark;
+    --bg:#111827; --panel:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --line:#374151;
     --accent:#60a5fa; --accent-text:#0b1220; --bad:#f87171;
-    --hit:#15803d; --near:#a16207; --miss:#4b5563; --key:#374151;}
+    --hit:#15803d; --near:#a16207; --miss:#4b5563; --key:#4b5563; --given:#4ade80;
+    --key-miss:#1f2937; --key-miss-text:#6b7280;}
 }
+:root[data-theme="dark"]{color-scheme:dark;
+  --bg:#111827; --panel:#1f2937; --text:#f3f4f6; --muted:#9ca3af; --line:#374151;
+  --accent:#60a5fa; --accent-text:#0b1220; --bad:#f87171;
+  --hit:#15803d; --near:#a16207; --miss:#4b5563; --key:#4b5563; --given:#4ade80;
+  --key-miss:#1f2937; --key-miss-text:#6b7280;}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -38,6 +55,7 @@ a{color:var(--accent)}
 .btn{font:inherit;font-size:.95rem;padding:7px 12px;border-radius:999px;border:1px solid var(--line);
   background:var(--panel);color:inherit;cursor:pointer}
 .spacer{flex:1}
+#themeBtn{padding:7px 10px;line-height:1}
 #info{color:var(--muted);font-size:.9rem;margin:0 0 8px;min-height:1.3em}
 
 /* ---------- board ---------- */
@@ -53,7 +71,7 @@ a{color:var(--accent)}
   font-weight:800;font-size:calc(var(--t) * .55);text-transform:uppercase;border:2px solid var(--line);
   border-radius:6px;background:var(--panel)}
 .tile.filled{border-color:var(--muted)}
-.tile.given{border:2px dashed var(--hit);color:var(--hit)}
+.tile.given{border:2px dashed var(--given);color:var(--given)}
 .tile.hit{background:var(--hit);border-color:var(--hit);color:var(--tile-text)}
 .tile.near{background:var(--near);border-color:var(--near);color:var(--tile-text)}
 .tile.miss{background:var(--miss);border-color:var(--miss);color:var(--tile-text)}
@@ -80,7 +98,7 @@ a{color:var(--accent)}
 .kb button:active{filter:brightness(.85)}
 .kb button.hit{background:var(--hit);color:var(--tile-text)}
 .kb button.near{background:var(--near);color:var(--tile-text)}
-.kb button.miss{background:var(--miss);color:var(--tile-text)}
+.kb button.miss{background:var(--key-miss);color:var(--key-miss-text)}
 
 /* ---------- stats dialog ---------- */
 dialog{border:none;padding:0;background:var(--panel);color:var(--text);border-radius:12px;
@@ -120,6 +138,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
     <span class="spacer"></span>
     <button type="button" class="btn" id="newBtn">New word</button>
     <button type="button" class="btn" id="statsBtn">Stats</button>
+    <button type="button" class="btn" id="themeBtn"></button>
   </div>
   <p id="info"></p>
 
@@ -435,6 +454,27 @@ $('modeSeg').addEventListener('click', e => { const b = e.target.closest('button
 $('newBtn').addEventListener('click', () => { setMsg(''); newPractice(); });
 $('statsBtn').addEventListener('click', showStats);
 $('statsClose').addEventListener('click', () => $('statsDlg').close());
+
+/* ---------- theme button: Auto -> Dark -> Light -> Auto ----------
+   The choice is for this device (all players), in localStorage 'wg-theme'. */
+const THEMES = {
+  auto:  { icon: '🌓', name: 'Auto (same as the device)' },
+  dark:  { icon: '🌙', name: 'Dark' },
+  light: { icon: '☀️', name: 'Light' }
+};
+const NEXT_THEME = { auto: 'dark', dark: 'light', light: 'auto' };
+function getTheme() { return document.documentElement.dataset.theme || 'auto'; }
+function setTheme(t) {
+  if (t === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+  try { if (t === 'auto') localStorage.removeItem('wg-theme'); else localStorage.setItem('wg-theme', t); } catch (e) {}
+  const b = $('themeBtn');
+  b.textContent = THEMES[t].icon;
+  b.title = 'Colours: ' + THEMES[t].name + '. Tap to change.';
+  b.setAttribute('aria-label', b.title);
+}
+setTheme(getTheme());
+$('themeBtn').addEventListener('click', () => setTheme(NEXT_THEME[getTheme()]));
 
 /* ---------- sign-in gate (see ../shared/gate.js) ----------
    Play only when signed in, or offline with a check-out. Nobody may play -> back to the menu.
