@@ -184,7 +184,8 @@ setInterval(() => {
 function buildPad() {
   const pad = $('pad');
   pad.innerHTML = '';
-  ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'back'].forEach(k => {
+  // Same layout as a keyboard's numeric keypad: 7 8 9 on top, 0 at the bottom.
+  ['7', '8', '9', '4', '5', '6', '1', '2', '3', 'clear', '0', 'back'].forEach(k => {
     const b = document.createElement('button');
     b.type = 'button';
     if (k === 'clear') { b.textContent = 'Clear'; b.className = 'small'; b.setAttribute('aria-label', 'Clear PIN'); }
