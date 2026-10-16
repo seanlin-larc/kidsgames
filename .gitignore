@@ -1,0 +1,11 @@
+# Admin tools (admin/): installed packages and lock file stay on the computer.
+node_modules/
+admin/package-lock.json
+
+# Firebase service account keys must never be in this public repo.
+# Keep the key outside the repo folder; these lines are a second guard.
+*service-account*.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+admin/*.json
+!admin/package.json

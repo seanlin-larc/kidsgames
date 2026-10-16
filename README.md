@@ -20,6 +20,10 @@ kidsgames/
 │   └── family.js      Firebase: sign-in, send the outbox, family top 10
 ├── firebase/
 │   └── firestore.rules  Firestore security rules (copy into the Firebase console)
+├── admin/             Tools for Sean's computer only (Firebase Admin SDK); not part of the site
+│   ├── reset-pin.mjs  Sets a new PIN for a player (see admin/README.md)
+│   ├── package.json
+│   └── README.md
 ├── minesweeper/
 │   └── index.html     The game
 └── word-guess/
@@ -85,6 +89,12 @@ const ctx = await gate.enterGame({ bar: document.getElementById('who') });  // n
 ```
 
 - A game that adds new Firestore records needs a matching block in `firebase/firestore.rules`.
+
+### Reset a PIN
+
+The accounts cannot receive a reset email (`.invalid`). To set a new PIN, run
+`admin/reset-pin.mjs` on Sean's computer with a Firebase service account key. See
+[admin/README.md](admin/README.md). Never put the key in this repo.
 
 ## Test locally
 
