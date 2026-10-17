@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101c30">
+<title>Move The Red Locomotive · Puzzle Workshop</title>
+<style>
+:root { color-scheme: dark; font-family: system-ui,-apple-system,Segoe UI,sans-serif; background:#0b1322; color:#e9f0fb; }
+* { box-sizing: border-box; }
+body { margin:0; min-width:320px; }
+body.kg-wait #workshop { visibility:hidden; }
+button { font:inherit; cursor:pointer; }
+button:focus-visible, .palette-card:focus-visible, .board:focus-visible { outline:3px solid #fbc56c; outline-offset:3px; }
+button:disabled { cursor:default; opacity:.4; }
+[hidden] { display:none!important; }
+.topline { padding:13px max(14px,calc((100vw - 2560px)/2)); display:flex; align-items:center; justify-content:space-between; gap:14px; border-bottom:1px solid #25374f; background:#0f1b30; }
+.topline .brand { font-size:clamp(13px,1.2vw,22px); font-weight:800; letter-spacing:.02em; }
+.topline a { color:#abc6e6; font-size:13px; text-decoration:none; }
+.topline small { font-size:12px; color:#8eaccd; }
+.canvas { width:100%; max-width:2560px; margin:auto; container-type:inline-size; }
+.sheet { display:grid; grid-template-columns:repeat(11,minmax(0,1fr)); grid-auto-rows:calc(100cqw / 11); align-items:stretch; position:relative; padding-bottom:16px; }
+.cell-note { color:#8da9c8; font-size:clamp(9px,1vw,14px); display:flex; align-items:center; }
+#playerBar, #playerBar .kg-bar { display:contents!important; }
+#playerBar .kg-bar > span:first-child { grid-column:4/span3; grid-row:1; align-self:center; text-align:center; font-size:clamp(10px,1vw,17px); }
+#playerBar .kg-bar .kg-off { grid-column:1/span2; grid-row:1; align-self:center; justify-self:center; font-size:clamp(10px,1vw,16px); }
+#playerBar .kg-bar [data-act="checkout"] { grid-column:8/span2; grid-row:1; }
+#playerBar .kg-bar [data-act="signout"] { grid-column:10/span2; grid-row:1; }
+#playerBar .kg-bar button { align-self:center; justify-self:stretch; min-height:clamp(29px,3.1vw,54px); margin:4px; background:#192943; border-color:#365778; font-size:clamp(10px,1vw,17px); }
+#playerBar .kg-bar button:hover:not(:disabled) { background:#2b4160; }
+.action { align-self:center; justify-self:stretch; padding:9px 5px; margin:clamp(2px,.6vw,12px); min-height:40%; border:1px solid #46617f; border-radius:10px; background:#1d324d; color:#f5faff; font-size:clamp(11px,1.2vw,20px); font-weight:700; }
+.action:hover:not(:disabled) { background:#324c70; }
+.action.primary { background:#196e72; border-color:#5bd4cb; }
+.action.primary:hover { background:#21888c; }
+#reset { grid-column:3/span2; grid-row:2; }
+#undo { grid-column:5/span2; grid-row:2; }
+#redo { grid-column:7/span2; grid-row:2; }
+#save { grid-column:9/span2; grid-row:2; }
+.difficulty { display:flex; justify-content:center; align-items:center; padding:4px; margin:5px 2px; border-radius:10px; border:1px solid transparent; background:none; color:#b2c5df; font-size:clamp(10px,1.1vw,18px); font-weight:700; }
+.difficulty[aria-pressed="true"] { background:#d7a64e; color:#192234; border-color:#ffdf95; }
+#beginner { grid-column:4/span2; grid-row:3; }
+#intermediate { grid-column:6/span2; grid-row:3; }
+#hard { grid-column:8/span2; grid-row:3; }
+#crazy { grid-column:10/span2; grid-row:3; }
+.board { grid-column:3/span7; grid-row:4/span7; position:relative; display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); grid-template-rows:repeat(7,minmax(0,1fr)); border:clamp(2px,.28vw,7px) solid #8d9cb3; background:#233a4d; box-shadow:0 15px 45px #0006; outline-offset:0; touch-action:none; user-select:none; }
+.board .tile { border:1px solid #466478; background:linear-gradient(130deg,#273f4e 0%,#1b313f 100%); position:relative; }
+.board .tile:nth-child(odd) { background:linear-gradient(130deg,#2a4552 0%,#213745 100%); }
+.board .tile::after { content:""; position:absolute; inset:47% 0; background:#54788755; pointer-events:none; }
+.board .tile.drop-ok { background:#1d625e; }
+.board .tile.drop-no { background:#8e4248; }
+.exit { grid-column:10; grid-row:6/span2; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:5px; background:#1b584e; color:#9bffcf; font-size:clamp(9px,1.1vw,20px); border:clamp(2px,.3vw,7px) dashed #83e2b9; border-left:0; font-weight:800; letter-spacing:.05em; }
+.exit span { writing-mode:vertical-rl; transform:rotate(180deg); }
+.piece { position:absolute; display:flex; align-items:center; justify-content:center; border:clamp(2px,.2vw,5px) solid #111a27; border-radius:clamp(4px,.7vw,16px); color:#132337; font-weight:900; font-size:clamp(10px,1.55vw,31px); box-shadow:inset 0 3px 8px #fff5,0 2px 6px #0008; z-index:2; cursor:grab; touch-action:none; transition:filter .12s; user-select:none; }
+.piece::before { content:""; position:absolute; inset:18% 7%; border-top:3px solid #ffffff66; border-bottom:3px solid #00000029; pointer-events:none; }
+.piece .piece-label { z-index:1; text-align:center; pointer-events:none; text-shadow:0 1px #ffffff55; }
+.piece.selected { outline:3px solid #ffe9a0; outline-offset:-1px; filter:brightness(1.08); z-index:5; }
+.piece.dragging { opacity:.67; cursor:grabbing; }
+.piece.invalid { outline:4px solid #f28b87; }
+.piece.red { background:#f05d63; }
+.piece.blue { background:#74c5e3; }
+.piece.gold { background:#e9b64f; }
+.piece.green { background:#95cdb5; }
+.piece.purple { background:#beabec; }
+.piece.slate { background:#aabccc; }
+#test { grid-column:9; grid-row:11; margin:5%; }
+#testResult { grid-column:10/span2; grid-row:11; align-self:center; justify-self:center; text-align:center; font-size:clamp(12px,1.65vw,28px); font-weight:900; color:#cedcef; }
+#testResult.ok { color:#8cebd7; }
+#testResult.bad { color:#ff9f9a; }
+#testResult.busy { color:#ffd789; }
+.hint-line { grid-column:3/span7; grid-row:12; align-self:center; text-align:center; font-size:clamp(10px,1.02vw,19px); color:#b9cde2; padding:6px; }
+.tray-label { grid-column:2/span8; grid-row:13; align-self:center; color:#d6e8f7; font-size:clamp(12px,1.8vw,30px); font-weight:800; }
+.tray-subtitle { grid-column:2/span9; grid-row:14; align-self:start; font-size:clamp(10px,1vw,17px); color:#9cb7d1; }
+.palette-card { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; border:1px solid #3d5874; background:#172b42; border-radius:clamp(7px,1vw,19px); padding:7px; cursor:grab; user-select:none; touch-action:none; text-align:center; box-shadow:0 7px 19px #0004; }
+.palette-card.active { border:3px solid #f3ce73; background:#254566; }
+.palette-card .sample { width:80%; min-height:28%; display:flex; align-items:center; justify-content:center; border-radius:8px; border:2px solid #182334; color:#132337; font-size:clamp(11px,1vw,20px); font-weight:900; }
+.palette-card .sample.vertical { width:40%; min-height:50%; }
+.palette-card .sample.square { width:50%; min-height:45%; }
+.palette-card .name { font-size:clamp(10px,1.15vw,20px); font-weight:800; line-height:1.3; }
+.palette-card .dimension { color:#9cb2ce; font-size:clamp(10px,.9vw,16px); }
+.palette-card.red .sample { background:#f05d63; }
+.palette-card.blue .sample { background:#74c5e3; }
+.palette-card.gold .sample { background:#e9b64f; }
+.palette-card.green .sample { background:#95cdb5; }
+.palette-card.purple .sample { background:#beabec; }
+.palette-card.slate .sample { background:#aabccc; }
+#item-red { grid-column:2/span2;grid-row:15/span3; }
+#item-h2 { grid-column:5/span2;grid-row:15/span3; }
+#item-v2 { grid-column:8/span2;grid-row:15/span3; }
+#item-h3 { grid-column:2/span2;grid-row:19/span3; }
+#item-v3 { grid-column:5/span2;grid-row:19/span3; }
+#item-platform { grid-column:8/span2;grid-row:19/span3; }
+.details { grid-column:2/span9; grid-row:23/span3; display:flex; align-items:center; justify-content:center; flex-direction:column; text-align:center; background:#15263b; border:1px solid #314a66; border-radius:12px; padding:10px; gap:8px; }
+.details p { margin:0; font-size:clamp(11px,1.2vw,20px); }
+.details .tools { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+.details button,.extras button { padding:9px 15px; border-radius:8px; border:1px solid #536d88; background:#213e58; color:#edf6ff; }
+.extras { grid-column:2/span9; grid-row:27/span2; display:flex; justify-content:center; flex-wrap:wrap; align-items:center; gap:12px; padding:10px; }
+#status { grid-column:2/span9; grid-row:29/span2; text-align:center; align-self:center; font-size:clamp(11px,1.1vw,18px); color:#b6cee5; padding:4px; }
+@media(max-width:700px) {
+ .topline { padding:10px;flex-wrap:wrap; }
+ #playerBar .kg-bar button { font-size:9px;line-height:1.1; padding:3px; border-radius:4px; margin:2px; }
+ .action { padding:2px; min-height:30px;border-radius:5px; }
+ .difficulty { font-size:clamp(8px,1.6vw,12px); margin:0; padding:2px; }
+ .palette-card { gap:2px;padding:3px;border-radius:6px; }
+ .palette-card .sample { border-width:1px; border-radius:3px; }
+ .palette-card .dimension { font-size:9px; }
+ .details .tools { gap:3px; }
+ .details button,.extras button { padding:4px 7px;font-size:11px; }
+ .hint-line { line-height:1.1; }
+}
+@media(prefers-reduced-motion:reduce) { * { transition:none!important; animation:none!important; } }
+</style>
+</head>
+<body class="kg-wait">
+<header class="topline">
+  <div><a href="../">← All games</a> <span class="brand">Move The Red Locomotive</span></div>
+  <small>Puzzle Workshop · Editor prototype</small>
+</header>
+<main id="workshop" class="canvas">
+<div class="sheet">
+  <div id="playerBar" aria-label="Player controls">Checking sign-in…</div>
+  <button id="reset" class="action" type="button">Reset</button>
+  <button id="undo" class="action" type="button">Undo</button>
+  <button id="redo" class="action" type="button">Redo</button>
+  <button id="save" class="action primary" type="button">Save</button>
+  <button id="beginner" class="difficulty" type="button" aria-pressed="true" data-difficulty="Beginner">Beginner</button>
+  <button id="intermediate" class="difficulty" type="button" aria-pressed="false" data-difficulty="Intermediate">Intermediate</button>
+  <button id="hard" class="difficulty" type="button" aria-pressed="false" data-difficulty="Hard">Hard</button>
+  <button id="crazy" class="difficulty" type="button" aria-pressed="false" data-difficulty="Crazy">Crazy</button>
+  <div id="board" class="board" role="grid" aria-label="7 by 7 puzzle board" tabindex="0"></div>
+  <div class="exit" title="Two-cell-wide exit opening at J6–J7"><span>EXIT →</span></div>
+  <button id="test" class="action primary" type="button">Test</button>
+  <output id="testResult" aria-live="polite" title="Fewest sliding moves to exit">—</output>
+  <div class="hint-line">Drag a module to the board, or select a module and tap a cell.</div>
+  <div class="tray-label">Puzzle modules</div>
+  <div class="tray-subtitle">Unlimited reusable templates. The red locomotive can appear only once.</div>
+  <div class="palette-card red" id="item-red" role="button" tabindex="0" data-template="red" aria-label="Add red locomotive, 2 by 1">
+    <div class="sample">RED</div><div class="name">Red locomotive</div><div class="dimension">2 × 1 · Horizontal</div>
+  </div>
+  <div class="palette-card blue" id="item-h2" role="button" tabindex="0" data-template="h2" aria-label="Add short horizontal train, 2 by 1">
+    <div class="sample">H2</div><div class="name">Short train</div><div class="dimension">2 × 1 · Horizontal</div>
+  </div>
+  <div class="palette-card green" id="item-v2" role="button" tabindex="0" data-template="v2" aria-label="Add short vertical train, 1 by 2">
+    <div class="sample vertical">V2</div><div class="name">Vertical train</div><div class="dimension">1 × 2 · Vertical</div>
+  </div>
+  <div class="palette-card gold" id="item-h3" role="button" tabindex="0" data-template="h3" aria-label="Add long horizontal train, 3 by 1">
+    <div class="sample">H3</div><div class="name">Long train</div><div class="dimension">3 × 1 · Horizontal</div>
+  </div>
+  <div class="palette-card purple" id="item-v3" role="button" tabindex="0" data-template="v3" aria-label="Add long vertical train, 1 by 3">
+    <div class="sample vertical">V3</div><div class="name">Tall train</div><div class="dimension">1 × 3 · Vertical</div>
+  </div>
+  <div class="palette-card slate" id="item-platform" role="button" tabindex="0" data-template="platform" aria-label="Add square platform, 2 by 2">
+    <div class="sample square">P</div><div class="name">Platform</div><div class="dimension">2 × 2 · Both axes</div>
+  </div>
+  <div class="details">
+    <p id="selectedInfo">Select a train to move, rotate or remove it.</p>
+    <div class="tools">
+      <button id="rotate" type="button">Rotate (R)</button>
+      <button id="remove" type="button">Remove (Delete)</button>
+      <button id="clearSelection" type="button">Deselect (Esc)</button>
+    </div>
+  </div>
+  <div class="extras">
+    <button type="button" id="export">Export JSON</button>
+    <button type="button" id="import">Import JSON</button>
+    <input id="importFile" type="file" accept=".json,application/json" hidden>
+  </div>
+  <div id="status" role="status" aria-live="polite">Editor ready. Add the red locomotive on board row 3 or 4.</div>
+</div>
+</main>
+<script type="module" src="./editor.js"></script>
+</body>
+</html>
