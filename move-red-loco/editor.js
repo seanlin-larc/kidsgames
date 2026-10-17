@@ -195,7 +195,8 @@ function renderMoveLog(activeIndex = -1, follow = false) {
   });
   if (follow) panel.scrollTop = panel.scrollHeight;
   else if (activeIndex >= 0) {
-    const entryHeight = panel.clientWidth / 2;
+    // Entries are now in the right sidebar, not half a spreadsheet cell.
+    const entryHeight = list.firstElementChild?.getBoundingClientRect().height || 38;
     const top = entryHeight * activeIndex, bottom = top + entryHeight;
     panel.scrollTop = bottom > oldScroll + panel.clientHeight ?
       bottom - panel.clientHeight : top < oldScroll ? top : oldScroll;
