@@ -11,13 +11,15 @@ This is an **original puzzle editor**, inspired by the mechanical idea of Railro
 
 The interface uses a responsive 11-column sheet with up to 2560 px width and at least 30 rows:
 
-- A1: shared offline warning; H1: shared check-out; J1: shared sign-out.
+- A1–B1: shared offline warning; E1: appearance toggle (Light / Dark / Auto); F1–G1: current player; H1–I1: shared check-out; J1–K1: shared sign-out.
 - C2: Reset; E2: Undo; G2: Redo; I2: Save flyout (Save as Beginner / Medium / Hard / Crazy).
 - Row 3 difficulty buttons removed. The 7×7 board shifts up one row.
 - C3–I9: 7×7 board; J5 and J6 are selectable exit gates. Exactly **one gate is open** per puzzle (J5 by default). Logical solver exit rows stay unchanged.
 - C11–E11: Build / Play toggle. In Build, I11: Test and J11: solver result (X = exhaustively unsolvable, number = optimal sliding moves; ? = search limit; ! = invalid).
 - In Play, G11–H11: **Replay**; I11: **Moves** (tap to focus the history); J11: number of moves made. K3–K9: scrollable move log, one move per line at two lines per page-grid row.
 - From row 12 down: module tray and supporting tools, shifted up one row. Modules retain one empty grid column and row between cards.
+
+**Appearance (E1):** tap the theme button to cycle **Light → Dark → Auto → Light** (from the default Auto, first tap chooses Light). Light uses bright board, controls, palette, move log, and panels; Dark uses deep navy surfaces and brighter contrast. Auto follows the device's light/dark setting and updates when that setting changes. An explicit Light or Dark choice is saved on this device using `mrl-theme`, independent of the signed-in player or puzzle draft. Auto removes the stored override. The choice applies instantly without reloading.
 
 **Mouse or touch:** drag a module from the tray onto the board, or select a module and tap a board cell. Drag a placed piece to reposition it. Template copies are unlimited except the single red locomotive. Overlaps and out-of-board positions are blocked.
 
@@ -47,7 +49,7 @@ Play mode starts only if the puzzle passes layout validation, including having o
 3. Press **Test**: a clear matching exit should return **1 step**. Select the opposite exit without moving the red locomotive; Test should return **X**.
 4. Add a horizontal train in the same row, between the red locomotive and the gate. Test should return **X** if that train cannot leave the row.
 5. Place a vertical train across the exit path with room to slide clear. Test should report a nonzero solvable step count.
-6. Check drag, touch, rotate, undo/redo, reset, the four Save tiers, reload, Export JSON and Import JSON. Switch to Play and verify editing is disabled. Make three slides: the count should be 3 and K3–K9 should contain three numbered lines. Press Replay: the pieces should follow those moves, highlight each line, then restore the final arrangement. Switch to Build during another Replay: it must cancel and restore the original layout.
+6. Tap the E1 appearance control through Light, Dark and Auto; test device appearance changes in Auto and a reload after choosing Dark. Check drag, touch, rotate, undo/redo, reset, the four Save tiers, reload, Export JSON and Import JSON. Switch to Play and verify editing is disabled. Make three slides: the count should be 3 and K3–K9 should contain three numbered lines. Press Replay: the pieces should follow those moves, highlight each line, then restore the final arrangement. Switch to Build during another Replay: it must cancel and restore the original layout.
 7. For offline testing, visit online and press **Check out**. The current shared family feature grants **48 hours**, not 72. Disconnect and revisit the workshop.
 
 Local development: run `python -m http.server 8000` in the repository root and open `http://localhost:8000/`. Do not open files via `file://` because module imports and Firebase sign-in need HTTP.
@@ -65,7 +67,7 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v5`.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v6`.
 - The root game menu is **not** updated. The page is only a prototype, not a playable game.
 - Firestore security rules are unchanged. No levels or results are uploaded.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
