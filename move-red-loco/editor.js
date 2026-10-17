@@ -2,6 +2,49 @@ import { validatePuzzle } from "./solver.js";
 import { attemptSlide, attemptExit } from "./play-rules.js";
 import { enterGame } from "../shared/gate.js";
 
+// Device-wide appearance preference; independent of puzzle save and current player.
+// Auto follows the OS theme immediately and reacts to subsequent OS changes.
+const THEME_STORAGE_KEY = "mrl-theme";
+const THEME_NEXT = Object.freeze({auto:"dark",dark:"light",light:"auto"});
+const THEME_ICONS = Object.freeze({auto:"◐",dark:"☾",light:"☀"});
+const systemTheme = window.matchMedia?.("(prefers-color-scheme: dark)");
+function applyTheme(preference, persist = false) {
+  const mode = Object.hasOwn(THEME_NEXT, preference) ? preference : "auto";
+  const effective = mode === "auto" ? (systemTheme?.matches ? "dark" : "light") : mode;
+  document.documentElement.dataset.themeSetting = mode;
+  document.documentElement.dataset.theme = effective;
+  const button = document.getElementById("themeBtn");
+  button.querySelector(".theme-symbol").textContent = THEME_ICONS[mode];
+  button.querySelector(".theme-name").textContent = mode[0].toUpperCase() + mode.slice(1);
+  button.dataset.appearance = mode;
+  const description = mode === "auto" ? "Auto (device currently " + effective + ")" : mode;
+  button.title = "Appearance: " + description + ". Choose " + THEME_NEXT[mode] + ".";
+  button.setAttribute("aria-label",button.title);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content",
+    effective === "light" ? "#e5eef7" : "#101c30");
+  if (persist) {
+    try {
+      if (mode === "auto") localStorage.removeItem(THEME_STORAGE_KEY);
+      else localStorage.setItem(THEME_STORAGE_KEY, mode);
+    } catch (_) { /* Storage can be unavailable in restricted/private sessions. */ }
+  }
+}
+const currentTheme = document.documentElement.dataset.themeSetting || "auto";
+applyTheme(currentTheme);
+document.getElementById("themeBtn").addEventListener("click", () => {
+  applyTheme(THEME_NEXT[document.documentElement.dataset.themeSetting] || "auto", true);
+});
+const onSystemThemeChange = () => {
+  if (document.documentElement.dataset.themeSetting === "auto") applyTheme("auto");
+};
+if (systemTheme) {
+  if (typeof systemTheme.addEventListener === "function") {
+    systemTheme.addEventListener("change", onSystemThemeChange);
+  } else if (typeof systemTheme.addListener === "function") {
+    systemTheme.addListener(onSystemThemeChange);
+  }
+}
+
 const board = document.getElementById("board");
 const $ = id => document.getElementById(id);
 const TEMPLATES = Object.freeze({
