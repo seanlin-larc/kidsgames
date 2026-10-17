@@ -21,6 +21,7 @@
 <title>Move The Red Locomotive · Puzzle Workshop</title>
 <style>
 :root { color-scheme: dark; font-family: system-ui,-apple-system,Segoe UI,sans-serif; background:#0b1322; color:#e9f0fb; }
+:root[data-theme="dark"] { color-scheme:dark; background:#0b1322; color:#e9f0fb; }
 * { box-sizing: border-box; }
 body { margin:0; min-width:320px; }
 body.kg-wait #workshop { visibility:hidden; }
@@ -261,7 +262,7 @@ button:disabled { cursor:default; opacity:.4; }
     </div>
   </div>
   <div id="board" class="board" role="grid" aria-label="7 by 7 puzzle board" tabindex="0"></div>
-  <button id="themeBtn" type="button" aria-label="Appearance: Auto. Switch to Dark" title="Appearance: Auto (follows device)">
+  <button id="themeBtn" type="button" aria-label="Appearance: Auto. Switch to Light" title="Appearance: Auto (follows device)">
     <span class="theme-symbol" aria-hidden="true">◐</span><span class="theme-name">Auto</span>
   </button>
   <button class="exit-gate" data-exit-row="2" type="button" aria-pressed="true" aria-label="Select exit J5, board row 3" title="Choose exit J5 (board row 3)">
