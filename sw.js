@@ -8,7 +8,7 @@
 //
 // NEW GAME: add its folder (and any extra files) to PRECACHE below.
 
-const CACHE = "kidsgames-v1";
+const CACHE = "kidsgames-v2";
 const SDK = "https://www.gstatic.com/firebasejs/13.0.0/";
 const PRECACHE = [
   "./",
@@ -18,6 +18,10 @@ const PRECACHE = [
   "minesweeper/",
   "word-guess/",
   "word-guess/words.js",
+  "move-red-loco/",
+  "move-red-loco/editor.js",
+  "move-red-loco/solver.js",
+  "move-red-loco/solver-worker.js",
   SDK + "firebase-app.js",
   SDK + "firebase-auth.js",
   SDK + "firebase-firestore.js"
