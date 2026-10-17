@@ -28,6 +28,7 @@ kidsgames/
 │   ├── index.html      7×7 board editor
 │   ├── editor.js       Drag/drop and local drafts
 │   ├── solver.js       BFS shortest-solution checker
+│   ├── play-rules.js   Valid Play moves and exit logic
 │   └── solver-worker.js
 ├── minesweeper/
 │   └── index.html     The game
@@ -57,7 +58,7 @@ kidsgames/
 |-------------|--------|
 | minesweeper | `ms-` (data in `ms-v2`) |
 | word-guess  | `wg-` (data in `wg-v1`, colour theme in `wg-theme`) |
-| move-red-loco | `mrl-` (`mrl-editor-v1:<uid>` local creator drafts) |
+| move-red-loco | `mrl-` (`mrl-editor-v1:<uid>` local creator drafts, `mrl-theme` per-device Light/Dark/Auto appearance) |
 | site (shared) | `kg-` (`kg-lastPlayer`, `kg-checkout`, `kg-lock`, `kg-outbox`) |
 
 ## Publish
