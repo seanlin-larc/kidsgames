@@ -4,6 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#101c30">
+<script>
+// Apply the saved appearance before CSS paints to avoid flashing the wrong theme.
+(() => {
+  let preference = "auto";
+  try {
+    const saved = localStorage.getItem("mrl-theme");
+    if (saved === "light" || saved === "dark") preference = saved;
+  } catch (_) {}
+  const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+  document.documentElement.dataset.themeSetting = preference;
+  document.documentElement.dataset.theme = preference === "auto" ?
+    (systemDark ? "dark" : "light") : preference;
+})();
+</script>
 <title>Move The Red Locomotive · Puzzle Workshop</title>
 <style>
 :root { color-scheme: dark; font-family: system-ui,-apple-system,Segoe UI,sans-serif; background:#0b1322; color:#e9f0fb; }
@@ -67,6 +81,81 @@ button:disabled { cursor:default; opacity:.4; }
 .sheet[data-mode="play"] .piece { cursor:grab; }
 .sheet[data-mode="play"] .exit-gate[aria-pressed="true"] { cursor:pointer; }
 .sheet[data-mode="play"] .exit-gate[aria-pressed="false"] { cursor:not-allowed; }
+
+
+/* E3 overlaps the board: reserve only a slim strip at its upper edge. */
+#themeBtn { grid-column:5; grid-row:3; z-index:9; align-self:start; justify-self:center;
+ display:flex; align-items:center; justify-content:center; gap:5px; width:92%; max-width:132px;
+ min-height:clamp(25px,2.9cqw,46px); margin-top:clamp(2px,.4cqw,8px);
+ padding:3px 5px; border:1px solid #7896ad; border-radius:999px; background:#172c45ed;
+ color:#e9f6ff; font-size:clamp(10px,1cqw,18px); font-weight:750;
+ box-shadow:0 3px 12px #07142177; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+ touch-action:manipulation; }
+#themeBtn:hover { border-color:#c4e3f1; background:#2b4c65f5; }
+#themeBtn .theme-symbol { font-size:1.12em; }
+#themeBtn .theme-name { overflow:hidden; text-overflow:ellipsis; }
+@container (max-width:530px) { #themeBtn .theme-name { display:none; } }
+:root[data-theme="light"] { color-scheme:light; background:#f3f7fc; color:#1b344b; }
+:root[data-theme="light"] .topline { background:#e5eef7; border-bottom-color:#b5ccdd; }
+:root[data-theme="light"] .topline a { color:#165c82; }
+:root[data-theme="light"] .topline small,
+:root[data-theme="light"] .cell-note { color:#476781; }
+:root[data-theme="light"] #playerBar .kg-bar > span:first-child { color:#234660; }
+:root[data-theme="light"] #playerBar .kg-bar .kg-off { color:#ad5128; }
+:root[data-theme="light"] #playerBar .kg-bar button {
+ background:#ffffff; color:#1a3b52; border-color:#97b3c9; }
+:root[data-theme="light"] #playerBar .kg-bar button:hover:not(:disabled) { background:#dbeef6; }
+:root[data-theme="light"] .action { background:#fff; color:#1c3e58; border-color:#91acc1; }
+:root[data-theme="light"] .action:hover:not(:disabled) { background:#deedf6; }
+:root[data-theme="light"] .action.primary { background:#11696c; border-color:#0d7375; color:#fff; }
+:root[data-theme="light"] .action.primary:hover:not(:disabled) { background:#0b555a; }
+:root[data-theme="light"] .save-menu { background:#fff; border-color:#9cbbd1; box-shadow:0 12px 25px #34567038; }
+:root[data-theme="light"] .save-menu button { color:#17364d; }
+:root[data-theme="light"] .save-menu button:hover,
+:root[data-theme="light"] .save-menu button:focus-visible { background:#e1eff7; }
+:root[data-theme="light"] #modeToggle { border-color:#91b1c5; }
+:root[data-theme="light"] #modeToggle button { background:#e6eff6; color:#294b61; }
+:root[data-theme="light"] #modeToggle button[aria-pressed="true"] {
+ background:#c67824; color:#fff; }
+:root[data-theme="light"] #playInfo { color:#3b637c; }
+:root[data-theme="light"] #themeBtn { background:#fffef5f0; border-color:#769aae;
+ color:#254458; box-shadow:0 3px 10px #4e6e8530; }
+:root[data-theme="light"] #themeBtn:hover { background:#fff; border-color:#3d7397; }
+:root[data-theme="light"] .board { border-color:#7296af; background:#d3e4ee; box-shadow:0 12px 30px #57778b40; }
+:root[data-theme="light"] .board .tile { border-color:#a4c0d1;
+ background:linear-gradient(130deg,#f6fafd 0%,#e3eef5 100%); }
+:root[data-theme="light"] .board .tile:nth-child(odd) {
+ background:linear-gradient(130deg,#eaf3f9 0%,#d8e7f0 100%); }
+:root[data-theme="light"] .board .tile::after { background:#83adc54c; }
+:root[data-theme="light"] .board .tile.drop-ok { background:#a8ead3; }
+:root[data-theme="light"] .board .tile.drop-no { background:#f5abb2; }
+:root[data-theme="light"] .exit-gate { border-color:#89a8ba; color:#48667b;
+ background:repeating-linear-gradient(135deg,#e5edf4,#e5edf4 6px,#d2e0e9 6px,#d2e0e9 12px); }
+:root[data-theme="light"] .exit-gate[aria-pressed="true"] { border-color:#238c69; background:#c8f0df; color:#135b40; }
+:root[data-theme="light"] .piece.selected { outline-color:#ad6121; filter:brightness(1.02); }
+:root[data-theme="light"] .piece.invalid { outline-color:#b52a38; }
+:root[data-theme="light"] .move-log { background:#eaf3f9; border-color:#94b4c9; }
+:root[data-theme="light"] .move-log li { color:#23455d; border-bottom-color:#c5d9e7; }
+:root[data-theme="light"] .move-log li.replay-current { background:#16746c; color:#fff; }
+:root[data-theme="light"] .move-log .empty { color:#58788d; }
+:root[data-theme="light"] #testResult { color:#31506c; }
+:root[data-theme="light"] #testResult.ok { color:#096f51; }
+:root[data-theme="light"] #testResult.bad { color:#a62334; }
+:root[data-theme="light"] #testResult.busy { color:#9b6116; }
+:root[data-theme="light"] .hint-line { color:#48677e; }
+:root[data-theme="light"] .tray-label { color:#23465e; }
+:root[data-theme="light"] .tray-subtitle { color:#496981; }
+:root[data-theme="light"] .palette-card { background:#fdfefe; border-color:#9ab9cf;
+ box-shadow:0 6px 18px #496c8728; }
+:root[data-theme="light"] .palette-card.active { border-color:#b56c17; background:#fff2d2; }
+:root[data-theme="light"] .palette-card .name { color:#1c4057; }
+:root[data-theme="light"] .palette-card .dimension { color:#476981; }
+:root[data-theme="light"] .details { background:#e7f0f7; border-color:#b7cedd; }
+:root[data-theme="light"] .details button,
+:root[data-theme="light"] .extras button { background:#fff; border-color:#91afc4; color:#254559; }
+:root[data-theme="light"] .details button:hover:not(:disabled),
+:root[data-theme="light"] .extras button:hover:not(:disabled) { background:#d8eaf5; }
+:root[data-theme="light"] #status { color:#42647c; }
 
 .board { grid-column:3/span7; grid-row:3/span7; position:relative; display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); grid-template-rows:repeat(7,minmax(0,1fr)); border:clamp(2px,.28vw,7px) solid #8d9cb3; background:#233a4d; box-shadow:0 15px 45px #0006; outline-offset:0; touch-action:none; user-select:none; }
 .board .tile { border:1px solid #466478; background:linear-gradient(130deg,#273f4e 0%,#1b313f 100%); position:relative; }
@@ -163,6 +252,9 @@ button:disabled { cursor:default; opacity:.4; }
     </div>
   </div>
   <div id="board" class="board" role="grid" aria-label="7 by 7 puzzle board" tabindex="0"></div>
+  <button id="themeBtn" type="button" aria-label="Appearance: Auto. Switch to Dark" title="Appearance: Auto (follows device)">
+    <span class="theme-symbol" aria-hidden="true">◐</span><span class="theme-name">Auto</span>
+  </button>
   <button class="exit-gate" data-exit-row="2" type="button" aria-pressed="true" aria-label="Select exit J5, board row 3" title="Choose exit J5 (board row 3)">
     <span class="arrow" aria-hidden="true">→</span><span class="gate-text">J5</span>
   </button>
