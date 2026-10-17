@@ -44,8 +44,21 @@ button:disabled { cursor:default; opacity:.4; }
 #modeToggle button { flex:1; border:0; background:#1c3148; color:#b9cbdc; font-size:clamp(12px,1.15vw,20px); font-weight:750; padding:4px; }
 #modeToggle button[aria-pressed="true"] { background:#e3b562; color:#1d2a35; }
 #playInfo { grid-column:6/span3; grid-row:11; align-self:center; text-align:center; font-size:clamp(11px,1vw,18px); color:#a7c8e0; }
+#replay { grid-column:7/span2; grid-row:11; display:none; }
+.sheet[data-mode="play"] #playInfo { grid-column:6; }
+.sheet[data-mode="play"] #replay { display:block; }
+#replay:disabled { opacity:.45; }
+.move-log { grid-column:11; grid-row:3/span7; min-height:0; overflow-y:auto; overflow-x:hidden;
+ background:#14283d; border:1px solid #476482; border-radius:5px; scrollbar-width:thin; overscroll-behavior:contain; }
+.move-log ol { list-style:none; padding:0; margin:0; }
+.move-log li { display:flex; justify-content:center; align-items:center; width:100%; height:calc(100cqw / 22); 
+ padding:0 1px; white-space:nowrap; overflow:hidden; font-size:clamp(7px,.76cqw,16px); 
+ font-variant-numeric:tabular-nums; border-bottom:1px solid #31465b; color:#d4e8f9; }
+.move-log li.replay-current { background:#377d73; color:#fff; font-weight:800; }
+.move-log .empty { display:block; padding:6px 2px; color:#9cb2c9; font-size:clamp(8px,.8cqw,15px); text-align:center; }
+.move-log[hidden] { display:none!important; }
 .sheet[data-mode="play"] #reset,.sheet[data-mode="play"] #undo,.sheet[data-mode="play"] #redo,
-.sheet[data-mode="play"] #saveBox,.sheet[data-mode="play"] #test,.sheet[data-mode="play"] #testResult,
+.sheet[data-mode="play"] #saveBox,
 .sheet[data-mode="play"] .hint-line,.sheet[data-mode="play"] .tray-label,.sheet[data-mode="play"] .tray-subtitle,
 .sheet[data-mode="play"] .palette-card,.sheet[data-mode="play"] .details,.sheet[data-mode="play"] .extras {
  opacity:.28; filter:grayscale(1); pointer-events:none;
@@ -82,6 +95,7 @@ button:disabled { cursor:default; opacity:.4; }
 .piece.slate { background:#aabccc; }
 #test { grid-column:9; grid-row:11; margin:5%; }
 #testResult { grid-column:10/span2; grid-row:11; align-self:center; justify-self:center; text-align:center; font-size:clamp(12px,1.65vw,28px); font-weight:900; color:#cedcef; }
+.sheet[data-mode="play"] #testResult { grid-column:10; color:#8cebd7; }
 #testResult.ok { color:#8cebd7; }
 #testResult.bad { color:#ff9f9a; }
 #testResult.busy { color:#ffd789; }
@@ -160,8 +174,13 @@ button:disabled { cursor:default; opacity:.4; }
     <button id="playMode" type="button" aria-pressed="false">Play</button>
   </div>
   <output id="playInfo" aria-live="polite">Build mode</output>
+  <button id="replay" class="action" type="button" disabled title="Replay the moves you made">Replay</button>
   <button id="test" class="action primary" type="button">Test</button>
   <output id="testResult" aria-live="polite" title="Fewest sliding moves to exit">—</output>
+  <aside id="moveLog" class="move-log" role="region" aria-label="Play move history" tabindex="0" hidden>
+    <ol id="moveLogList" aria-label="Moves made"></ol>
+    <span id="moveLogEmpty" class="empty">No moves</span>
+  </aside>
   <div class="hint-line">Select one exit (J5 or J6). Drag a module to the board, or tap a cell.</div>
   <div class="tray-label">Puzzle modules</div>
   <div class="tray-subtitle">Unlimited reusable templates. The red locomotive can appear only once.</div>
