@@ -1,9 +1,9 @@
 import { solvePuzzle } from "./solver.js";
 
 self.addEventListener("message", event => {
-  const { requestId, pieces } = event.data;
+  const { requestId, pieces, exitRow } = event.data;
   try {
-    const result = solvePuzzle(pieces, undefined, progress => {
+    const result = solvePuzzle(pieces, exitRow, undefined, progress => {
       self.postMessage({ requestId, type: "progress", progress });
     });
     self.postMessage({ requestId, type: "complete", result });
