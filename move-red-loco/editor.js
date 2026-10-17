@@ -373,6 +373,7 @@ function render() {
     el.setAttribute("aria-pressed", String(active));
   });
   document.querySelector(".sheet").dataset.mode = mode;
+  $("mobileMoves").hidden = mode !== "play" || !portraitPhone();
   if (mode !== "play") {
     document.querySelector(".sheet").dataset.mobileLog = "closed";
     $("mobileMoves").setAttribute("aria-expanded","false");
@@ -553,19 +554,20 @@ function beginDrag(event, data) {
   document.addEventListener("pointerup", dragEnd);
   document.addEventListener("pointercancel", dragCancel);
 }
-function createPreview(type) {
+function createPreview(type, piece = null) {
   const t = TEMPLATES[type];
+  const w = piece?.w || t.w, h = piece?.h || t.h;
   dragPreview = document.createElement("div");
   dragPreview.className = "piece dragging " + t.color;
   const label = document.createElement("span");
   label.className = "piece-label";
-  label.textContent = nextPieceLabel(type) || t.label;
+  label.textContent = piece?.label || nextPieceLabel(type) || t.label;
   dragPreview.appendChild(label);
   dragPreview.style.position = "fixed";
   dragPreview.style.zIndex = "1000";
   dragPreview.style.pointerEvents = "none";
-  dragPreview.style.width = (t.w * cellSize()) + "px";
-  dragPreview.style.height = (t.h * cellSize()) + "px";
+  dragPreview.style.width = (w * cellSize()) + "px";
+  dragPreview.style.height = (h * cellSize()) + "px";
   document.body.appendChild(dragPreview);
 }
 function dragMove(event) {
@@ -608,9 +610,15 @@ function dragMove(event) {
     };
     const valid = fits({ ...piece, ...d.proposed }, d.id) &&
       (piece.type !== "red" || [2,3].includes(d.proposed.y));
+    if (!dragPreview) createPreview(piece.type,piece);
+    dragPreview.style.left = (event.clientX - piece.w * size/2) + "px";
+    dragPreview.style.top = (event.clientY - piece.h * size/2) + "px";
     highlightFootprint({ ...piece, ...d.proposed }, valid);
     const original = board.querySelector('.piece[data-piece-id="' + d.id + '"]');
-    if (original) original.classList.toggle("invalid", !valid);
+    if (original) {
+      original.classList.toggle("invalid", !valid);
+      original.classList.add("dragging");
+    }
   }
 }
 function finishDrag() {
@@ -619,7 +627,7 @@ function finishDrag() {
   document.removeEventListener("pointercancel",dragCancel);
   if (dragPreview) { dragPreview.remove(); dragPreview = null; }
   clearHover();
-  board.querySelectorAll(".piece.invalid").forEach(el=>el.classList.remove("invalid"));
+  board.querySelectorAll(".piece.invalid,.piece.dragging").forEach(el=>el.classList.remove("invalid","dragging"));
   pointerDrag = null;
 }
 function dragEnd(event) {
