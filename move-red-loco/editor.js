@@ -417,7 +417,7 @@ function render() {
   updateFloatingTemplate();
   const p = byId(selectedId);
   $("selectedInfo").textContent = mode === "play" ? "Play preview — editing tools are disabled." :
-    p ? TEMPLATES[p.type].name + " (" + p.id + ") at " + String.fromCharCode(65+p.x) + (p.y+1) : selectedTemplate
+    p ? (p.label || p.id) + " · " + TEMPLATES[p.type].name + " at " + String.fromCharCode(65+p.x) + (p.y+1) : selectedTemplate
     ? "Module selected: " + TEMPLATES[selectedTemplate].name : "Select a train to move, rotate or remove it.";
 }
 function clearHover() { board.querySelectorAll(".tile").forEach(tile => tile.classList.remove("drop-ok","drop-no")); }
