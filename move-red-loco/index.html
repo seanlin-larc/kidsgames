@@ -36,7 +36,7 @@ button:disabled { cursor:default; opacity:.4; }
 .sheet { display:grid; grid-template-columns:repeat(11,minmax(0,1fr)); grid-template-rows:repeat(30,calc(100cqw / 11)); grid-auto-rows:calc(100cqw / 11); align-items:stretch; position:relative; padding-bottom:16px; }
 .cell-note { color:#8da9c8; font-size:clamp(9px,1vw,14px); display:flex; align-items:center; }
 #playerBar, #playerBar .kg-bar { display:contents!important; }
-#playerBar .kg-bar > span:first-child { grid-column:4/span3; grid-row:1; align-self:center; text-align:center; font-size:clamp(10px,1vw,17px); }
+#playerBar .kg-bar > span:first-child { grid-column:6/span2; grid-row:1; align-self:center; text-align:center; min-width:0; line-height:1.15; font-size:clamp(9px,.9vw,17px); }
 #playerBar .kg-bar .kg-off { grid-column:1/span2; grid-row:1; align-self:center; justify-self:center; font-size:clamp(10px,1vw,16px); }
 #playerBar .kg-bar [data-act="checkout"] { grid-column:8/span2; grid-row:1; }
 #playerBar .kg-bar [data-act="signout"] { grid-column:10/span2; grid-row:1; }
@@ -83,25 +83,29 @@ button:disabled { cursor:default; opacity:.4; }
 .sheet[data-mode="play"] .exit-gate[aria-pressed="false"] { cursor:not-allowed; }
 
 
-/* E3 overlaps the board: reserve only a slim strip at its upper edge. */
-#themeBtn { grid-column:5; grid-row:3; z-index:9; align-self:start; justify-self:center;
- display:flex; align-items:center; justify-content:center; gap:5px; width:92%; max-width:132px;
- min-height:clamp(25px,2.9cqw,46px); margin-top:clamp(2px,.4cqw,8px);
- padding:3px 5px; border:1px solid #7896ad; border-radius:999px; background:#172c45ed;
+/* Appearance toggle sits entirely within E1, clear of both the board and player label. */
+#themeBtn { grid-column:5; grid-row:1; z-index:9; align-self:center; justify-self:center;
+ display:flex; align-items:center; justify-content:center; gap:4px; width:92%; max-width:132px;
+ min-width:0; min-height:clamp(25px,3.2cqw,50px); margin:0;
+ padding:3px 5px; border:1px solid #7896ad; border-radius:999px; background:#172c45;
  color:#e9f6ff; font-size:clamp(10px,1cqw,18px); font-weight:750;
- box-shadow:0 3px 12px #07142177; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
- touch-action:manipulation; }
-#themeBtn:hover { border-color:#c4e3f1; background:#2b4c65f5; }
-#themeBtn .theme-symbol { font-size:1.12em; }
-#themeBtn .theme-name { overflow:hidden; text-overflow:ellipsis; }
-@container (max-width:530px) { #themeBtn .theme-name { display:none; } }
+ box-shadow:0 3px 12px #07142177; touch-action:manipulation; }
+#themeBtn:hover { border-color:#c4e3f1; background:#2b4c65; }
+#themeBtn .theme-symbol { font-size:1.12em; flex:none; line-height:1; }
+#themeBtn .theme-name { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+@container (max-width:850px) {
+ #themeBtn { gap:0; padding:2px; }
+ #themeBtn .theme-name { display:none; }
+}
 :root[data-theme="light"] { color-scheme:light; background:#f3f7fc; color:#1b344b; }
 :root[data-theme="light"] .topline { background:#e5eef7; border-bottom-color:#b5ccdd; }
 :root[data-theme="light"] .topline a { color:#165c82; }
 :root[data-theme="light"] .topline small,
 :root[data-theme="light"] .cell-note { color:#476781; }
 :root[data-theme="light"] #playerBar .kg-bar > span:first-child { color:#234660; }
-:root[data-theme="light"] #playerBar .kg-bar .kg-off { color:#ad5128; }
+:root[data-theme="light"] #playerBar .kg-bar .kg-off {
+ background:#ffe2bf; color:#853b18; border:1px solid #dda36c;
+}
 :root[data-theme="light"] #playerBar .kg-bar button {
  background:#ffffff; color:#1a3b52; border-color:#97b3c9; }
 :root[data-theme="light"] #playerBar .kg-bar button:hover:not(:disabled) { background:#dbeef6; }
@@ -121,6 +125,11 @@ button:disabled { cursor:default; opacity:.4; }
 :root[data-theme="light"] #themeBtn { background:#fffef5f0; border-color:#769aae;
  color:#254458; box-shadow:0 3px 10px #4e6e8530; }
 :root[data-theme="light"] #themeBtn:hover { background:#fff; border-color:#3d7397; }
+:root[data-theme="light"] button:focus-visible,
+:root[data-theme="light"] .palette-card:focus-visible,
+:root[data-theme="light"] .board:focus-visible {
+ outline-color:#9b510e;
+}
 :root[data-theme="light"] .board { border-color:#7296af; background:#d3e4ee; box-shadow:0 12px 30px #57778b40; }
 :root[data-theme="light"] .board .tile { border-color:#a4c0d1;
  background:linear-gradient(130deg,#f6fafd 0%,#e3eef5 100%); }
