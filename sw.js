@@ -8,7 +8,7 @@
 //
 // NEW GAME: add its folder (and any extra files) to PRECACHE below.
 
-const CACHE = "kidsgames-v8";
+const CACHE = "kidsgames-v9";
 const SDK = "https://www.gstatic.com/firebasejs/13.0.0/";
 const PRECACHE = [
   "./",
