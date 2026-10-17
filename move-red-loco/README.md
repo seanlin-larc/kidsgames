@@ -34,6 +34,8 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 
 **Piece letters:** one red locomotive = **X**; 2-cell trains (2×1 or 1×2) share letters **A–L**; 3-cell trains (3×1 or 1×3) share **O–S**; 2×2 platforms use **U** and **V**. Letters stay attached to pieces through dragging, rotation, Undo/Redo and Save/Export. If an older imported or locally saved draft lacks letters, the editor assigns the first available letters in each group. The editor stops additions when a letter group is exhausted.
 
+**Randomized block colors:** when a new non-red block is placed, it receives an individual random hue (integer **16–344°**, avoiding hues within ±15° of red at 0°/360°) using a fixed **67% saturation / 73% lightness** for readable dark letters. The selection algorithm compares the new hue against existing blocks and tries to stay at least 30° apart when possible, so identical train types need not share a color. The red locomotive **X** always remains red. The preview while dragging or placing a new block shows its assigned color. A numeric `hue` field is stored with each non-red piece in JSON and the per-player saved draft, so color does **not** change during editing, Undo/Redo, Play, Replay or after reload. Existing old drafts without hues are migrated on load and the upgraded colors are saved to that local latest-draft slot; older JSON imports are assigned colors in the editor.
+
 **Keyboard:** use Tab and Enter to select a palette module. Use arrow keys to reposition a selected piece, R to rotate a non-red train, Delete to remove, Escape to deselect, Ctrl/Cmd+Z to undo, and Ctrl/Cmd+Shift+Z to redo.
 
 **Save flyout:** choose Save as Beginner, Medium, Hard, or Crazy. It stores both the latest per-player draft (`mrl-editor-v1:<uid>`) and one independent slot per tier (`mrl-editor-v1:<uid>:<tier>`). Saving again under the same tier overwrites that tier's previous slot. The last saved draft is restored on reopening. Export JSON contains the chosen tier and exit. Earlier drafts labeled Intermediate import as Medium. Older files with no exit select the red locomotive's row, otherwise J5. **No cloud puzzle saving, level library, or Firestore writes are implemented.**
@@ -66,8 +68,9 @@ Historical grid layout (superseded by the compact three-column workspace): CSS G
 3. Press **Test**: a clear matching exit should return **1 step**. Select the opposite exit in Build: X should move to that row automatically when unblocked. Confirm that the selected gate changes with X.
 4. Add a horizontal train in the same row, between the red locomotive and the gate. Test should return **X** if that train cannot leave the row.
 5. Place a vertical train across the exit path with room to slide clear. Test should report a nonzero solvable step count.
-6. Check Light, Dark and Auto in the top bar. On a portrait phone, hold an empty board cell, select X, drag the floating block to an exit row, long-press to choose an A–L car, and drag the placed car off the board to discard it. Verify the module samples have consistent scale on desktop and X/A/O/U letters appear on placed pieces. Check Undo, Save, JSON export/import, and restored labels. In Play, open the Moves flyout, make legal moves, and verify the count/history and Replay. Switch to Build to restore the original layout.
-7. For offline testing, visit online and press **Check out**. The current shared family feature grants **48 hours**, not 72. Disconnect and revisit the workshop.
+6. Add two blocks of the same type and confirm they usually receive different colors, neither in the red hue band. Undo and Redo a placement, then Save, reload and compare colors. Export/Import the puzzle and verify colors persist. Import an older JSON draft without hue values and check that non-red pieces are recolored but X stays red.
+7. Check Light, Dark and Auto in the top bar. On a portrait phone, hold an empty board cell, select X, drag the floating block to an exit row, long-press to choose an A–L car, and drag the placed car off the board to discard it. Verify the module samples have consistent scale on desktop and X/A/O/U letters appear on placed pieces. Check Undo, Save, JSON export/import, and restored labels. In Play, open the Moves flyout, make legal moves, and verify the count/history and Replay. Switch to Build to restore the original layout.
+8. For offline testing, visit online and press **Check out**. The current shared family feature grants **48 hours**, not 72. Disconnect and revisit the workshop.
 
 Local development: run `python -m http.server 8000` in the repository root and open `http://localhost:8000/`. Do not open files via `file://` because module imports and Firebase sign-in need HTTP.
 
@@ -84,7 +87,7 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v10`.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v11`.
 - The root game menu is **not** updated. The page is only a prototype, not a playable game.
 - Firestore security rules are unchanged. No levels or results are uploaded.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
