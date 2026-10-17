@@ -24,6 +24,11 @@ kidsgames/
 │   ├── reset-pin.mjs  Sets a new PIN for a player (see admin/README.md)
 │   ├── package.json
 │   └── README.md
+├── move-red-loco/      Puzzle Workshop prototype (not yet on the menu)
+│   ├── index.html      7×7 board editor
+│   ├── editor.js       Drag/drop and local drafts
+│   ├── solver.js       BFS shortest-solution checker
+│   └── solver-worker.js
 ├── minesweeper/
 │   └── index.html     The game
 └── word-guess/
@@ -52,6 +57,7 @@ kidsgames/
 |-------------|--------|
 | minesweeper | `ms-` (data in `ms-v2`) |
 | word-guess  | `wg-` (data in `wg-v1`, colour theme in `wg-theme`) |
+| move-red-loco | `mrl-` (`mrl-editor-v1:<uid>` local creator drafts) |
 | site (shared) | `kg-` (`kg-lastPlayer`, `kg-checkout`, `kg-lock`, `kg-outbox`) |
 
 ## Publish
