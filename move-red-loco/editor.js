@@ -12,7 +12,7 @@ const TEMPLATES = Object.freeze({
   platform: { type:"platform", w:2, h:2, axis:"both", color:"slate", label:"P",   name:"Square platform" }
 });
 const TIERS = ["Beginner","Intermediate","Hard","Crazy"];
-let pieces = [], nextId = 1, difficulty = "Beginner";
+let pieces = [], nextId = 1, difficulty = "Beginner", exitRow = 2; // J6 selected by default
 let selectedTemplate = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
 let storageKey = null;
@@ -34,9 +34,9 @@ function fits(testPiece, exceptId = null) {
     testPiece.x < p.x + p.w && testPiece.x + testPiece.w > p.x &&
     testPiece.y < p.y + p.h && testPiece.y + testPiece.h > p.y);
 }
-function snapshot() { return { pieces:clone(pieces), nextId, difficulty }; }
+function snapshot() { return { pieces:clone(pieces), nextId, difficulty, exitRow }; }
 function applySnapshot(s) {
-  pieces = clone(s.pieces); nextId = s.nextId; difficulty = s.difficulty;
+  pieces = clone(s.pieces); nextId = s.nextId; difficulty = s.difficulty; exitRow = s.exitRow;
   selectedId = null; selectedTemplate = null; invalidateTest(); render();
 }
 function recordEdit() {
@@ -143,6 +143,12 @@ function render() {
     el.setAttribute("aria-pressed", String(active));
   });
   document.querySelectorAll(".difficulty").forEach(el => el.setAttribute("aria-pressed", String(el.dataset.difficulty === difficulty)));
+  document.querySelectorAll(".exit-gate").forEach(el => {
+    const active = Number(el.dataset.exitRow) === exitRow;
+    el.setAttribute("aria-pressed", String(active));
+    el.querySelector(".arrow").textContent = active ? "→" : "×";
+    el.title = active ? "Active exit J" + (exitRow + 4) : "Select exit J" + (Number(el.dataset.exitRow) + 4);
+  });
   $("undo").disabled = !undoStack.length;
   $("redo").disabled = !redoStack.length;
   $("remove").disabled = !selectedId;
@@ -269,6 +275,13 @@ board.addEventListener("pointerdown", event=>{
     board.focus({ preventScroll:true });
   }
 });
+document.querySelectorAll(".exit-gate").forEach(btn=>btn.addEventListener("click",()=>{
+  const row = Number(btn.dataset.exitRow);
+  if (![2,3].includes(row) || row === exitRow) return;
+  recordEdit();
+  exitRow = row;
+  modified("Active exit is now J" + (row + 4) + ". Only one exit is open");
+}));
 document.querySelectorAll(".difficulty").forEach(btn=>btn.addEventListener("click",()=>{
   if (difficulty === btn.dataset.difficulty) return;
   recordEdit();
@@ -305,7 +318,7 @@ document.addEventListener("keydown", e=>{
 });
 
 $("test").addEventListener("click",()=>{
-  const errors = validatePuzzle(pieces);
+  const errors = validatePuzzle(pieces, exitRow);
   if (errors.length) {
     $("testResult").textContent = "!";
     $("testResult").className = "bad";
@@ -351,11 +364,11 @@ $("test").addEventListener("click",()=>{
     $("testResult").textContent="!";$("testResult").className="bad";
     status("Solver could not start: " + error.message);
   };
-  worker.postMessage({requestId:id,pieces:clone(pieces)});
+  worker.postMessage({requestId:id,pieces:clone(pieces),exitRow});
 });
 
 function documentData() {
-  return { format:"move-red-loco-editor-v1", difficulty, pieces:clone(pieces) };
+  return { format:"move-red-loco-editor-v1", difficulty, exitRow, pieces:clone(pieces) };
 }
 $("save").addEventListener("click",()=>{
   try {
@@ -383,6 +396,7 @@ $("importFile").addEventListener("change",async event=>{
     const data=JSON.parse(await file.text());
     if (data.format!=="move-red-loco-editor-v1" || !TIERS.includes(data.difficulty) ||
         !Array.isArray(data.pieces) || data.pieces.length>35) throw Error("Not a supported puzzle file.");
+    if (data.exitRow !== undefined && ![2,3].includes(data.exitRow)) throw Error("Exit must be J6 or J7.");
     const ids=new Set(), imported=[];
     for (const p of data.pieces) {
       const t=TEMPLATES[p.type];
@@ -406,6 +420,8 @@ $("importFile").addEventListener("change",async event=>{
     }
     recordEdit();
     pieces=imported; difficulty=data.difficulty;
+    // Legacy v1 drafts had no exit selection; preserve their red locomotive row.
+    exitRow = data.exitRow ?? imported.find(p => p.id==="red" && [2,3].includes(p.y))?.y ?? 2;
     nextId=Math.max(1,...pieces.map(p=>Number(p.id.match(/[0-9]+$/)?.[0]||0)+1));
     selectedId=null;selectedTemplate=null;
     modified("Imported " + pieces.length + " modules");
@@ -420,7 +436,10 @@ if (ctx) {
     if (saved?.format==="move-red-loco-editor-v1" && Array.isArray(saved.pieces) && TIERS.includes(saved.difficulty)) {
       // Use the same constrained import validation for saved drafts at the next explicit import.
       // Local drafts contain only this editor's own schema.
-      pieces=saved.pieces; difficulty=saved.difficulty; nextId=saved.nextId || 1;
+      pieces=saved.pieces; difficulty=saved.difficulty;
+      exitRow = [2,3].includes(saved.exitRow) ? saved.exitRow :
+        saved.pieces.find(p=>p.id==="red" && [2,3].includes(p.y))?.y ?? 2;
+      nextId=saved.nextId || 1;
       status("Restored locally saved draft for " + ctx.player.code + ".");
     }
   } catch(error) { status("Could not restore saved draft."); }
