@@ -1,4 +1,5 @@
 import { validatePuzzle } from "./solver.js";
+import { attemptSlide, attemptExit } from "./play-rules.js";
 import { enterGame } from "../shared/gate.js";
 
 const board = document.getElementById("board");
@@ -11,11 +12,13 @@ const TEMPLATES = Object.freeze({
   v3:       { type:"v3",       w:1, h:3, axis:"v",    color:"purple", label:"V3",  name:"Tall train" },
   platform: { type:"platform", w:2, h:2, axis:"both", color:"slate", label:"P",   name:"Square platform" }
 });
-const TIERS = ["Beginner","Intermediate","Hard","Crazy"];
+const TIERS = ["Beginner","Medium","Hard","Crazy"];
+const normalizeTier = tier => tier === "Intermediate" ? "Medium" : tier;
 let pieces = [], nextId = 1, difficulty = "Beginner", exitRow = 2; // J6 selected by default
 let selectedTemplate = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
 let storageKey = null;
+let mode = "build", playStart = null, playMoves = 0, playWon = false;
 const clone = data => JSON.parse(JSON.stringify(data));
 const cellSize = () => board.getBoundingClientRect().width / 7;
 const byId = id => pieces.find(p => p.id === id);
@@ -54,6 +57,7 @@ function invalidateTest() {
   clearHover();
 }
 function selectTemplate(type) {
+  if (mode !== "build") return;
   selectedTemplate = selectedTemplate === type ? null : type;
   selectedId = null;
   render();
@@ -66,6 +70,7 @@ function selectPiece(id) {
   status("Selected " + byId(id)?.id + ". Drag to reposition, use arrow keys, or remove.");
 }
 function addTemplate(type, x, y) {
+  if (mode !== "build") return;
   const t = TEMPLATES[type];
   if (!t) return;
   if (type === "red" && byId("red")) return status("Only one red locomotive is allowed.");
@@ -79,6 +84,7 @@ function addTemplate(type, x, y) {
   modified("Added " + t.name);
 }
 function movePiece(id, x, y) {
+  if (mode !== "build") return;
   const p = byId(id);
   if (!p || (p.x === x && p.y === y)) return;
   if (!fits({ ...p, x, y }, id)) return status("Blocked placement. Modules cannot overlap or leave the board.");
@@ -87,6 +93,7 @@ function movePiece(id, x, y) {
   modified("Moved " + p.id);
 }
 function rotateSelected() {
+  if (mode !== "build") return;
   const p = byId(selectedId);
   if (!p) return;
   if (p.type === "red" || p.type === "platform") return status("This module has no alternate orientation.");
@@ -97,6 +104,7 @@ function rotateSelected() {
   modified("Rotated " + p.id);
 }
 function removeSelected() {
+  if (mode !== "build") return;
   if (!selectedId) return;
   const id = selectedId;
   recordEdit();
@@ -105,12 +113,14 @@ function removeSelected() {
   modified("Removed " + id);
 }
 function undo() {
+  if (mode !== "build") return;
   if (!undoStack.length) return;
   redoStack.push(snapshot());
   applySnapshot(undoStack.pop());
   status("Undo completed.");
 }
 function redo() {
+  if (mode !== "build") return;
   if (!redoStack.length) return;
   undoStack.push(snapshot());
   applySnapshot(redoStack.pop());
@@ -142,20 +152,39 @@ function render() {
     el.classList.toggle("active", active);
     el.setAttribute("aria-pressed", String(active));
   });
-  document.querySelectorAll(".difficulty").forEach(el => el.setAttribute("aria-pressed", String(el.dataset.difficulty === difficulty)));
+  document.querySelector(".sheet").dataset.mode = mode;
+  $("buildMode").setAttribute("aria-pressed", String(mode === "build"));
+  $("playMode").setAttribute("aria-pressed", String(mode === "play"));
+  $("playInfo").textContent = mode === "build" ? "Build mode" : playWon ? "Solved in " + playMoves + " moves!" : "Moves: " + playMoves;
+  document.querySelectorAll(".palette-card").forEach(el => {
+    el.setAttribute("aria-disabled", String(mode === "play"));
+    el.tabIndex = mode === "play" ? -1 : 0;
+  });
   document.querySelectorAll(".exit-gate").forEach(el => {
     const active = Number(el.dataset.exitRow) === exitRow;
     el.setAttribute("aria-pressed", String(active));
     el.querySelector(".arrow").textContent = active ? "→" : "×";
     el.title = active ? "Active exit J" + (exitRow + 4) : "Select exit J" + (Number(el.dataset.exitRow) + 4);
   });
-  $("undo").disabled = !undoStack.length;
-  $("redo").disabled = !redoStack.length;
-  $("remove").disabled = !selectedId;
-  $("rotate").disabled = !selectedId || ["red","platform"].includes(byId(selectedId)?.type);
-  $("clearSelection").disabled = !selectedId && !selectedTemplate;
+  $("reset").disabled = mode === "play";
+  $("undo").disabled = mode === "play" || !undoStack.length;
+  $("redo").disabled = mode === "play" || !redoStack.length;
+  $("save").disabled = mode === "play";
+  $("test").disabled = mode === "play" || !!worker;
+  document.querySelectorAll("#saveMenu button,.extras button,.details button").forEach(el => {
+    el.disabled = mode === "play" || (el.id === "remove" && !selectedId) ||
+      (el.id === "rotate" && (!selectedId || ["red","platform"].includes(byId(selectedId)?.type))) ||
+      (el.id === "clearSelection" && !selectedId && !selectedTemplate);
+  });
+  document.querySelectorAll(".exit-gate").forEach(el => {
+    el.disabled = mode === "play" && Number(el.dataset.exitRow) !== exitRow;
+    el.setAttribute("aria-label", mode === "play" ?
+      (Number(el.dataset.exitRow) === exitRow ? "Try exiting through this gate" : "Closed exit") :
+      "Select exit J" + (Number(el.dataset.exitRow) + 4));
+  });
   const p = byId(selectedId);
-  $("selectedInfo").textContent = p ? TEMPLATES[p.type].name + " (" + p.id + ") at " + String.fromCharCode(65+p.x) + (p.y+1) : selectedTemplate
+  $("selectedInfo").textContent = mode === "play" ? "Play preview — editing tools are disabled." :
+    p ? TEMPLATES[p.type].name + " (" + p.id + ") at " + String.fromCharCode(65+p.x) + (p.y+1) : selectedTemplate
     ? "Module selected: " + TEMPLATES[selectedTemplate].name : "Select a train to move, rotate or remove it.";
 }
 function clearHover() { board.querySelectorAll(".tile").forEach(tile => tile.classList.remove("drop-ok","drop-no")); }
@@ -171,7 +200,7 @@ function templateAnchor(clientX, clientY, type) {
   return { ...at, x:at.x - Math.floor((t.w-1)/2), y:at.y - Math.floor((t.h-1)/2) };
 }
 function beginDrag(event, data) {
-  if (event.button !== 0 || pointerDrag) return;
+  if (event.button !== 0 || pointerDrag || (mode === "play" && data.kind !== "play")) return;
   event.preventDefault();
   pointerDrag = { ...data, pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, moved:false, proposed:null };
   document.addEventListener("pointermove", dragMove);
@@ -210,6 +239,19 @@ function dragMove(event) {
       const valid = fits({ ...t, ...pos }) && (d.type !== "red" || !byId("red"));
       highlightFootprint({ ...t, ...pos }, valid);
     } else { d.proposed = null; clearHover(); }
+  } else if (d.kind === "play") {
+    const size = cellSize(), piece = byId(d.id);
+    if (!piece || playWon) return;
+    let dx = Math.round((event.clientX - d.startX) / size);
+    let dy = Math.round((event.clientY - d.startY) / size);
+    if (piece.axis === "h") dy = 0;
+    else if (piece.axis === "v") dx = 0;
+    else if (Math.abs(dx) >= Math.abs(dy)) dy = 0;
+    else dx = 0;
+    d.proposed = {dx,dy};
+    const outcome = attemptSlide(pieces,d.id,dx,dy,exitRow);
+    if (outcome.status === "moved") highlightFootprint({ ...piece, x:outcome.x,y:outcome.y },true);
+    else clearHover();
   } else {
     const size = cellSize();
     const dx = Math.round((event.clientX - d.startX) / size), dy = Math.round((event.clientY - d.startY) / size);
@@ -238,6 +280,8 @@ function dragEnd(event) {
   if (d.kind === "palette") {
     if (!d.moved) selectTemplate(d.type);
     else if (d.proposed && insideBoard(event.clientX,event.clientY)) addTemplate(d.type,d.proposed.x,d.proposed.y);
+  } else if (d.kind === "play") {
+    if (d.moved && d.proposed) slidePlayable(d.id,d.proposed.dx,d.proposed.dy);
   } else if (d.moved && d.proposed) movePiece(d.id,d.proposed.x,d.proposed.y);
 }
 function dragCancel() { finishDrag(); }
@@ -251,7 +295,7 @@ for (let y=0;y<7;y++) for (let x=0;x<7;x++) {
   board.appendChild(cell);
 }
 document.querySelectorAll(".palette-card").forEach(el=>{
-  el.addEventListener("pointerdown", e=>beginDrag(e,{kind:"palette",type:el.dataset.template}));
+  el.addEventListener("pointerdown", e=>{if(mode==="build")beginDrag(e,{kind:"palette",type:el.dataset.template});});
   el.addEventListener("keydown", e=>{
     if (e.key==="Enter" || e.key===" ") { e.preventDefault(); selectTemplate(el.dataset.template); }
   });
@@ -261,10 +305,16 @@ board.addEventListener("pointerdown", event=>{
   const pieceEl = event.target.closest(".piece");
   if (pieceEl) {
     const p = byId(pieceEl.dataset.pieceId);
-    if (!p) return;
-    selectPiece(p.id);
-    beginDrag(event,{kind:"board",id:p.id,originX:p.x,originY:p.y});
+    if (!p || (mode === "play" && playWon)) return;
+    if (mode === "play") {
+      selectedId = p.id; selectedTemplate = null; render();
+      beginDrag(event,{kind:"play",id:p.id,originX:p.x,originY:p.y});
+    } else {
+      selectPiece(p.id);
+      beginDrag(event,{kind:"board",id:p.id,originX:p.x,originY:p.y});
+    }
   } else {
+    if (mode === "play") return;
     if (selectedTemplate) {
       const pos = templateAnchor(event.clientX,event.clientY,selectedTemplate);
       addTemplate(selectedTemplate,pos.x,pos.y);
@@ -277,19 +327,17 @@ board.addEventListener("pointerdown", event=>{
 });
 document.querySelectorAll(".exit-gate").forEach(btn=>btn.addEventListener("click",()=>{
   const row = Number(btn.dataset.exitRow);
+  if (mode === "play") {
+    if (row === exitRow) exitPlayable();
+    return;
+  }
   if (![2,3].includes(row) || row === exitRow) return;
   recordEdit();
   exitRow = row;
   modified("Active exit is now J" + (row + 4) + ". Only one exit is open");
 }));
-document.querySelectorAll(".difficulty").forEach(btn=>btn.addEventListener("click",()=>{
-  if (difficulty === btn.dataset.difficulty) return;
-  recordEdit();
-  difficulty = btn.dataset.difficulty;
-  modified("Difficulty set to " + difficulty);
-}));
 $("reset").addEventListener("click",()=>{
-  if (!pieces.length) return;
+  if (mode !== "build" || !pieces.length) return;
   if (!confirm("Remove every module from this puzzle? You can still Undo.")) return;
   recordEdit(); pieces=[]; selectedId=null; selectedTemplate=null;
   modified("Cleared the board");
@@ -298,10 +346,19 @@ $("undo").addEventListener("click",undo);
 $("redo").addEventListener("click",redo);
 $("rotate").addEventListener("click",rotateSelected);
 $("remove").addEventListener("click",removeSelected);
-$("clearSelection").addEventListener("click",()=>{ selectedId=null; selectedTemplate=null; render();status("Selection cleared."); });
+$("clearSelection").addEventListener("click",()=>{ if(mode!=="build")return; selectedId=null; selectedTemplate=null; render();status("Selection cleared."); });
 document.addEventListener("keydown", e=>{
   const tag = e.target?.tagName;
   if (["INPUT","TEXTAREA","SELECT"].includes(tag)) return;
+  if (e.key === "Escape" && !$("saveMenu").hidden) { closeSaveMenu(); e.preventDefault(); return; }
+  if (mode === "play") {
+    if (e.key === "Escape") { selectedId = null; render(); return; }
+    const dirs = { ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1] };
+    if (dirs[e.key] && selectedId && !playWon) {
+      e.preventDefault(); slidePlayable(selectedId,...dirs[e.key]);
+    }
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==="z") {
     e.preventDefault(); if(e.shiftKey) redo(); else undo(); return;
   }
@@ -318,6 +375,7 @@ document.addEventListener("keydown", e=>{
 });
 
 $("test").addEventListener("click",()=>{
+  if (mode !== "build") return;
   const errors = validatePuzzle(pieces, exitRow);
   if (errors.length) {
     $("testResult").textContent = "!";
@@ -370,13 +428,37 @@ $("test").addEventListener("click",()=>{
 function documentData() {
   return { format:"move-red-loco-editor-v1", difficulty, exitRow, pieces:clone(pieces) };
 }
+function closeSaveMenu() {
+  $("saveMenu").hidden = true;
+  $("save").setAttribute("aria-expanded","false");
+}
 $("save").addEventListener("click",()=>{
-  try {
-    localStorage.setItem(storageKey,JSON.stringify({ ...documentData(), nextId, savedAt:new Date().toISOString() }));
-    status("Draft saved on this device for this player. Export JSON for a portable copy.");
-  } catch(error) { status("Could not save locally: " + error.message); }
+  if (mode !== "build") return;
+  const willOpen = $("saveMenu").hidden;
+  $("saveMenu").hidden = !willOpen;
+  $("save").setAttribute("aria-expanded",String(willOpen));
 });
+document.addEventListener("pointerdown", event=>{
+  if (!event.target.closest("#saveBox")) closeSaveMenu();
+});
+document.querySelectorAll("[data-save-tier]").forEach(btn=>btn.addEventListener("click",()=>{
+  if (mode !== "build" || !storageKey) return;
+  const tier = btn.dataset.saveTier;
+  if (!TIERS.includes(tier)) return;
+  try {
+    const draft = { ...documentData(), difficulty:tier, nextId, savedAt:new Date().toISOString() };
+    // Each tier has its own saved slot, as well as the latest working draft.
+    localStorage.setItem(storageKey + ":" + tier.toLowerCase(),JSON.stringify(draft));
+    localStorage.setItem(storageKey,JSON.stringify(draft));
+    if (difficulty !== tier) { recordEdit(); difficulty = tier; }
+    closeSaveMenu(); render();
+    status("Saved as " + tier + " on this device. Export JSON for a portable copy.");
+  } catch(error) {
+    closeSaveMenu(); status("Could not save locally: " + error.message);
+  }
+}));
 $("export").addEventListener("click",()=>{
+  if (mode !== "build") return;
   const data = JSON.stringify(documentData(),null,2)+"\n";
   const blob = new Blob([data],{type:"application/json"});
   const url = URL.createObjectURL(blob);
@@ -386,15 +468,16 @@ $("export").addEventListener("click",()=>{
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   status("Exported puzzle JSON. Saved files contain no account data.");
 });
-$("import").addEventListener("click",()=>$("importFile").click());
+$("import").addEventListener("click",()=>{if(mode==="build")$("importFile").click();});
 $("importFile").addEventListener("change",async event=>{
+  if (mode !== "build") return;
   const file=event.target.files?.[0];
   event.target.value="";
   if (!file) return;
   try {
     if (file.size > 100000) throw Error("File is too large.");
     const data=JSON.parse(await file.text());
-    if (data.format!=="move-red-loco-editor-v1" || !TIERS.includes(data.difficulty) ||
+    if (data.format!=="move-red-loco-editor-v1" || !TIERS.includes(normalizeTier(data.difficulty)) ||
         !Array.isArray(data.pieces) || data.pieces.length>35) throw Error("Not a supported puzzle file.");
     if (data.exitRow !== undefined && ![2,3].includes(data.exitRow)) throw Error("Exit must be J6 or J7.");
     const ids=new Set(), imported=[];
@@ -419,7 +502,7 @@ $("importFile").addEventListener("change",async event=>{
       }
     }
     recordEdit();
-    pieces=imported; difficulty=data.difficulty;
+    pieces=imported; difficulty=normalizeTier(data.difficulty);
     // Legacy v1 drafts had no exit selection; preserve their red locomotive row.
     exitRow = data.exitRow ?? imported.find(p => p.id==="red" && [2,3].includes(p.y))?.y ?? 2;
     nextId=Math.max(1,...pieces.map(p=>Number(p.id.match(/[0-9]+$/)?.[0]||0)+1));
@@ -433,10 +516,10 @@ if (ctx) {
   storageKey = "mrl-editor-v1:" + ctx.player.uid;
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
-    if (saved?.format==="move-red-loco-editor-v1" && Array.isArray(saved.pieces) && TIERS.includes(saved.difficulty)) {
+    if (saved?.format==="move-red-loco-editor-v1" && Array.isArray(saved.pieces) && TIERS.includes(normalizeTier(saved.difficulty))) {
       // Use the same constrained import validation for saved drafts at the next explicit import.
       // Local drafts contain only this editor's own schema.
-      pieces=saved.pieces; difficulty=saved.difficulty;
+      pieces=saved.pieces; difficulty=normalizeTier(saved.difficulty);
       exitRow = [2,3].includes(saved.exitRow) ? saved.exitRow :
         saved.pieces.find(p=>p.id==="red" && [2,3].includes(p.y))?.y ?? 2;
       nextId=saved.nextId || 1;
