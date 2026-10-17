@@ -5,7 +5,8 @@ import { enterGame } from "../shared/gate.js";
 // Device-wide appearance preference; independent of puzzle save and current player.
 // Auto follows the OS theme immediately and reacts to subsequent OS changes.
 const THEME_STORAGE_KEY = "mrl-theme";
-const THEME_NEXT = Object.freeze({auto:"dark",dark:"light",light:"auto"});
+// Cycle in the requested order: Light → Dark → Auto → Light.
+const THEME_NEXT = Object.freeze({light:"dark",dark:"auto",auto:"light"});
 const THEME_ICONS = Object.freeze({auto:"◐",dark:"☾",light:"☀"});
 const systemTheme = window.matchMedia?.("(prefers-color-scheme: dark)");
 function applyTheme(preference, persist = false) {
