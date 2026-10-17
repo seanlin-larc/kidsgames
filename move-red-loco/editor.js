@@ -14,7 +14,7 @@ const TEMPLATES = Object.freeze({
 });
 const TIERS = ["Beginner","Medium","Hard","Crazy"];
 const normalizeTier = tier => tier === "Intermediate" ? "Medium" : tier;
-let pieces = [], nextId = 1, difficulty = "Beginner", exitRow = 2; // J6 selected by default
+let pieces = [], nextId = 1, difficulty = "Beginner", exitRow = 2; // J5 selected by default
 let selectedTemplate = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
 let storageKey = null;
@@ -138,7 +138,7 @@ function slidePlayable(id, dx, dy) {
     playWon = true; playMoves++;
     selectedId = null;
     render();
-    status("The red locomotive escaped through J" + (exitRow + 4) + " in " + playMoves + " moves. Switch to Build to restore your puzzle.");
+    status("The red locomotive escaped through J" + (exitRow + 3) + " in " + playMoves + " moves. Switch to Build to restore your puzzle.");
     return;
   }
   const p = byId(id);
@@ -222,7 +222,7 @@ function render() {
     const active = Number(el.dataset.exitRow) === exitRow;
     el.setAttribute("aria-pressed", String(active));
     el.querySelector(".arrow").textContent = active ? "→" : "×";
-    el.title = active ? "Active exit J" + (exitRow + 4) : "Select exit J" + (Number(el.dataset.exitRow) + 4);
+    el.title = active ? "Active exit J" + (exitRow + 3) : "Select exit J" + (Number(el.dataset.exitRow) + 3);
   });
   $("reset").disabled = mode === "play";
   $("undo").disabled = mode === "play" || !undoStack.length;
@@ -238,7 +238,7 @@ function render() {
     el.disabled = mode === "play" && Number(el.dataset.exitRow) !== exitRow;
     el.setAttribute("aria-label", mode === "play" ?
       (Number(el.dataset.exitRow) === exitRow ? "Try exiting through this gate" : "Closed exit") :
-      "Select exit J" + (Number(el.dataset.exitRow) + 4));
+      "Select exit J" + (Number(el.dataset.exitRow) + 3));
   });
   const p = byId(selectedId);
   $("selectedInfo").textContent = mode === "play" ? "Play preview — editing tools are disabled." :
@@ -392,7 +392,7 @@ document.querySelectorAll(".exit-gate").forEach(btn=>btn.addEventListener("click
   if (![2,3].includes(row) || row === exitRow) return;
   recordEdit();
   exitRow = row;
-  modified("Active exit is now J" + (row + 4) + ". Only one exit is open");
+  modified("Active exit is now J" + (row + 3) + ". Only one exit is open");
 }));
 $("reset").addEventListener("click",()=>{
   if (mode !== "build" || !pieces.length) return;
@@ -537,7 +537,7 @@ $("importFile").addEventListener("change",async event=>{
     const data=JSON.parse(await file.text());
     if (data.format!=="move-red-loco-editor-v1" || !TIERS.includes(normalizeTier(data.difficulty)) ||
         !Array.isArray(data.pieces) || data.pieces.length>35) throw Error("Not a supported puzzle file.");
-    if (data.exitRow !== undefined && ![2,3].includes(data.exitRow)) throw Error("Exit must be J6 or J7.");
+    if (data.exitRow !== undefined && ![2,3].includes(data.exitRow)) throw Error("Exit must be J5 or J6.");
     const ids=new Set(), imported=[];
     for (const p of data.pieces) {
       const t=TEMPLATES[p.type];
