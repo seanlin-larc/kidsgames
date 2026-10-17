@@ -260,6 +260,10 @@ function templateAnchor(clientX, clientY, type) {
 function beginDrag(event, data) {
   if (event.button !== 0 || pointerDrag || (mode === "play" && data.kind !== "play")) return;
   event.preventDefault();
+  // The board stays mounted when the selected piece is re-rendered; capture its pointer for touch reliability.
+  if (data.kind === "board" || data.kind === "play") {
+    try { board.setPointerCapture(event.pointerId); } catch (_) {}
+  }
   pointerDrag = { ...data, pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, moved:false, proposed:null };
   document.addEventListener("pointermove", dragMove);
   document.addEventListener("pointerup", dragEnd);
