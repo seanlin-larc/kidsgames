@@ -216,8 +216,8 @@ function renderMoveLog(activeIndex = -1, follow = false) {
   playHistory.forEach((move, index) => {
     const el = document.createElement("li");
     const no = String(index + 1).padStart(2, "0");
-    const label = move.id === "red" ? "R" :
-      move.id.startsWith("platform") ? "P" : move.id.split("-")[0].toUpperCase();
+    const label = (playStart?.pieces.find(p=>p.id===move.id) ||
+      pieces.find(p=>p.id===move.id))?.label || move.id;
     el.textContent = no + " " + label + symbols[move.direction] +
       (move.direction === "exit" ? "" : move.cells);
     el.title = "Move " + (index + 1) + ": " + move.description;
@@ -236,7 +236,7 @@ function renderMoveLog(activeIndex = -1, follow = false) {
 }
 function recordPlayMove(id, direction, cells, won) {
   const piece = byId(id);
-  const title = piece ? TEMPLATES[piece.type]?.name || id : id;
+  const title = piece ? (piece.label || id) + " (" + (TEMPLATES[piece.type]?.name || id) + ")" : id;
   const verb = {right:"right",left:"left",up:"up",down:"down",exit:"out"}[direction];
   playHistory.push({
     id, direction, cells, won, after:clone(pieces),
@@ -309,6 +309,8 @@ async function replayMoves() {
 }
 function setMode(next) {
   if (next === mode) return;
+  cancelMobileHold();
+  closeMobilePicker();
   ++replayGeneration;
   replaying = false;
   if (pointerDrag) finishDrag();
@@ -371,7 +373,10 @@ function render() {
     el.setAttribute("aria-pressed", String(active));
   });
   document.querySelector(".sheet").dataset.mode = mode;
-  if (mode !== "play") document.querySelector(".sheet").dataset.mobileLog = "closed";
+  if (mode !== "play") {
+    document.querySelector(".sheet").dataset.mobileLog = "closed";
+    $("mobileMoves").setAttribute("aria-expanded","false");
+  }
   $("buildMode").setAttribute("aria-pressed", String(mode === "build"));
   $("playMode").setAttribute("aria-pressed", String(mode === "play"));
   $("playInfo").textContent = mode === "build" ? "Build mode" : replaying ? "Replaying…" : playWon ? "Solved!" : "Playing";
@@ -422,6 +427,114 @@ function highlightFootprint(p, valid) {
     if (el) el.classList.add(valid ? "drop-ok" : "drop-no");
   }
 }
+
+function updateFloatingTemplate() {
+  const el = $("floatingTemplate");
+  const type = selectedTemplate;
+  const visible = mode === "build" && portraitPhone() && !!type;
+  el.hidden = !visible;
+  if (!visible) return;
+  const t = TEMPLATES[type];
+  const letter = nextPieceLabel(type);
+  el.className = "piece floating-template " + t.color;
+  el.style.width = t.w * cellSize() + "px";
+  el.style.height = t.h * cellSize() + "px";
+  el.querySelector(".piece-label").textContent = letter || "—";
+  el.setAttribute("aria-label", letter ?
+    "Drag " + letter + " into position, or tap an empty cell." :
+    "No more labels available for this block type.");
+}
+function closeMobilePicker() {
+  $("mobilePicker").hidden = true;
+}
+function cancelMobileHold() {
+  const hold = mobileHold;
+  if (!hold) return;
+  clearTimeout(hold.timer);
+  document.removeEventListener("pointermove", mobileHoldMove);
+  document.removeEventListener("pointerup", mobileHoldUp);
+  document.removeEventListener("pointercancel", mobileHoldCancel);
+  mobileHold = null;
+}
+function mobileHoldMove(event) {
+  const h = mobileHold;
+  if (!h || event.pointerId !== h.pointerId) return;
+  if (Math.hypot(event.clientX-h.x,event.clientY-h.y)>10) cancelMobileHold();
+}
+function mobileHoldUp(event) {
+  const h = mobileHold;
+  if (!h || event.pointerId !== h.pointerId) return;
+  const opened = h.opened;
+  cancelMobileHold();
+  if (opened || mode !== "build") return;
+  if (selectedTemplate) {
+    const place = templateAnchor(event.clientX,event.clientY,selectedTemplate);
+    addTemplate(selectedTemplate,place.x,place.y);
+  } else if (selectedId) {
+    const p = byId(selectedId);
+    if (!p) return;
+    const place = {x:Math.round((event.clientX-boardRect().left)/cellSize()-p.w/2),
+      y:Math.round((event.clientY-boardRect().top)/cellSize()-p.h/2)};
+    movePiece(selectedId,place.x,place.y);
+  } else status("Long-press an empty board cell to choose a new block.");
+}
+function mobileHoldCancel(event) {
+  if (mobileHold && event.pointerId === mobileHold.pointerId) cancelMobileHold();
+}
+function startMobileHold(event) {
+  cancelMobileHold();
+  const h = {pointerId:event.pointerId,x:event.clientX,y:event.clientY,opened:false,timer:null};
+  mobileHold = h;
+  h.timer = setTimeout(()=>{
+    if (mobileHold !== h || mode !== "build") return;
+    h.opened = true;
+    selectedTemplate = null;
+    selectedId = null;
+    $("mobilePicker").hidden = false;
+    render();
+    status("Pick a block, then drag the floating block or tap the board.");
+  },480);
+  document.addEventListener("pointermove",mobileHoldMove);
+  document.addEventListener("pointerup",mobileHoldUp);
+  document.addEventListener("pointercancel",mobileHoldCancel);
+}
+$("closeMobilePicker").addEventListener("click",closeMobilePicker);
+document.querySelectorAll("[data-mobile-template]").forEach(btn=>btn.addEventListener("click",()=>{
+  if (!portraitPhone() || mode !== "build") return;
+  const type = btn.dataset.mobileTemplate;
+  if (type === "red" && byId("red")) {
+    closeMobilePicker(); status("Only one red locomotive can be on the board.");return;
+  }
+  if (!nextPieceLabel(type)) {
+    closeMobilePicker();status("All labels for that block type are already used.");return;
+  }
+  selectedTemplate = type;
+  selectedId = null;
+  closeMobilePicker();
+  render();
+  status("Drag the floating " + (nextPieceLabel(type)||type) + " or tap an empty board cell.");
+}));
+$("floatingTemplate").addEventListener("pointerdown", event=>{
+  if (mode !== "build" || !portraitPhone()) return;
+  $("floatingTemplate").hidden = true;
+  beginDrag(event,{kind:"palette",type:selectedTemplate,mobileFloating:true});
+});
+$("mobileMoves").addEventListener("click",()=>{
+  if (mode !== "play" || !portraitPhone()) return;
+  const sheet=document.querySelector(".sheet");
+  sheet.dataset.mobileLog=sheet.dataset.mobileLog==="open"?"closed":"open";
+  $("mobileMoves").setAttribute("aria-expanded",String(sheet.dataset.mobileLog==="open"));
+});
+document.addEventListener("pointerdown",event=>{
+  const sheet=document.querySelector(".sheet");
+  if (portraitPhone() && sheet.dataset.mobileLog==="open" &&
+      !event.target.closest(".right-panel") && !event.target.closest("#mobileMoves") &&
+      !event.target.closest("#test")) {
+    sheet.dataset.mobileLog="closed";
+    $("mobileMoves").setAttribute("aria-expanded","false");
+  }
+});
+
 function templateAnchor(clientX, clientY, type) {
   const t = TEMPLATES[type], r = boardRect(), size = cellSize();
   // Center of dragged block follows the pointer, including even-width blocks.
@@ -514,8 +627,11 @@ function dragEnd(event) {
   if (!d || event.pointerId !== d.pointerId) return;
   finishDrag();
   if (d.kind === "palette") {
-    if (!d.moved) selectTemplate(d.type);
+    if (!d.moved && !d.mobileFloating) selectTemplate(d.type);
     else if (d.proposed && insideBoard(event.clientX,event.clientY)) addTemplate(d.type,d.proposed.x,d.proposed.y);
+    if (d.mobileFloating && !insideBoard(event.clientX,event.clientY)) {
+      selectedTemplate = null;render();status("Discarded the floating block.");
+    } else if (d.mobileFloating) updateFloatingTemplate();
   } else if (d.kind === "play") {
     if (d.moved && d.proposed) slidePlayable(d.id,d.proposed.dx,d.proposed.dy);
   } else if (d.moved && mode === "build" && portraitPhone() && !insideBoard(event.clientX,event.clientY)) {
@@ -553,6 +669,7 @@ board.addEventListener("pointerdown", event=>{
     }
   } else {
     if (mode === "play") return;
+    if (portraitPhone()) { startMobileHold(event); return; }
     if (selectedTemplate) {
       const pos = templateAnchor(event.clientX,event.clientY,selectedTemplate);
       addTemplate(selectedTemplate,pos.x,pos.y);
@@ -570,9 +687,15 @@ document.querySelectorAll(".exit-gate").forEach(btn=>btn.addEventListener("click
     return;
   }
   if (![2,3].includes(row) || row === exitRow) return;
+  const red = byId("red");
+  if (red && !fits({...red,y:row},red.id)) {
+    status("Cannot switch exits: clear room to move X to the selected exit row.");
+    return;
+  }
   recordEdit();
+  if (red) red.y = row;
   exitRow = row;
-  modified("Active exit is now J" + (row + 3) + ". Only one exit is open");
+  modified("Active exit is now J" + (row + 3) + (red ? "; X moved into alignment" : ""));
 }));
 $("reset").addEventListener("click",()=>{
   if (mode !== "build" || !pieces.length) return;
@@ -614,9 +737,14 @@ document.addEventListener("keydown", e=>{
 
 $("test").addEventListener("click",()=>{
   if (mode === "play") {
+    if (portraitPhone()) {
+      const sheet = document.querySelector(".sheet");
+      sheet.dataset.mobileLog = sheet.dataset.mobileLog === "open" ? "closed" : "open";
+      $("mobileMoves").setAttribute("aria-expanded",String(sheet.dataset.mobileLog === "open"));
+    }
     const log = $("moveLog");
     log.scrollTop = log.scrollHeight;
-    log.focus({ preventScroll:true });
+    if (!portraitPhone()) log.focus({ preventScroll:true });
     return;
   }
   if (mode !== "build") return;
@@ -741,7 +869,8 @@ $("importFile").addEventListener("change",async event=>{
     // A draft may lack its red locomotive, but it must still fit and have no overlaps.
     for (let i=0;i<imported.length;i++) {
       const p=imported[i];
-      if (p.x<0||p.y<0||p.x+p.w>7||p.y+p.h>7 ||
+      if ((p.id === "red" && ![2,3].includes(p.y)) ||
+          p.x<0||p.y<0||p.x+p.w>7||p.y+p.h>7 ||
           imported.slice(0,i).some(q=>p.x<q.x+q.w&&p.x+p.w>q.x&&p.y<q.y+q.h&&p.y+p.h>q.y)) {
         throw Error("The file contains overlapping or off-board modules.");
       }
