@@ -7,19 +7,26 @@
 
 This is an **original puzzle editor**, inspired by the mechanical idea of Railroad RushHour. Do not copy commercial challenge arrangements or artwork into published levels.
 
-## Workshop — first draft
+## Compact workspace — Build / Play
 
-The interface uses a responsive 11-column sheet with up to 2560 px width and at least 30 rows:
+The workshop is designed to fit the **full editing interface within a 1200 × 900 browser viewport**, rather than using the earlier 11-column × 30-row spreadsheet arrangement.
 
-- A1–B1: shared offline warning; E1: appearance toggle (Light / Dark / Auto); F1–G1: current player; H1–I1: shared check-out; J1–K1: shared sign-out.
-- C2: Reset; E2: Undo; G2: Redo; I2: Save flyout (Save as Beginner / Medium / Hard / Crazy).
-- Row 3 difficulty buttons removed. The 7×7 board shifts up one row.
-- C3–I9: 7×7 board; J5 and J6 are selectable exit gates. Exactly **one gate is open** per puzzle (J5 by default). Logical solver exit rows stay unchanged.
-- C11–E11: Build / Play toggle. In Build, I11: Test and J11: solver result (X = exhaustively unsolvable, number = optimal sliding moves; ? = search limit; ! = invalid).
-- In Play, G11–H11: **Replay**; I11: **Moves** (tap to focus the history); J11: number of moves made. K3–K9: scrollable move log, one move per line at two lines per page-grid row.
-- From row 12 down: module tray and supporting tools, shifted up one row. Modules retain one empty grid column and row between cards.
+| Area | Build mode | Play mode |
+|---|---|---|
+| Header and top bar | Game title, Light/Dark/Auto appearance, player, offline, Check out, Sign out | Same |
+| **Left panel** | Reset, Undo, Redo, Save as flyout, Build/Play switch, Test result, guidance | Editor controls disabled; Build/Play, Replay, Moves, count |
+| **Centre** | Fixed 7×7 square grid with one selected right-side exit (J5 or J6) | Same board, with legal sliding interactions |
+| **Right panel** | Six draggable modules in a 2-column × 3-row palette, rotation/remove/deselect, JSON import/export | Scrollable log of every valid move, with highlighted Replay step |
+| Bottom status | Current editor message | Move, replay, or win message |
 
-**Appearance (E1):** tap the theme button to cycle **Light → Dark → Auto → Light** (from the default Auto, first tap chooses Light). Light uses bright board, controls, palette, move log, and panels; Dark uses deep navy surfaces and brighter contrast. Auto follows the device's light/dark setting and updates when that setting changes. An explicit Light or Dark choice is saved on this device using `mrl-theme`, independent of the signed-in player or puzzle draft. Auto removes the stored override. The choice applies instantly without reloading.
+- Main content is a **three-column responsive CSS grid** (controls / square board / palette-or-history), with a maximum page width of **1200px**.
+- The centre board's maximum width responds to both viewport width and viewport height (`max-width:calc(100dvh - 168px)` on the board stage); the exit strip is 32px wide.
+- At widths below 980px, the controls become a compact toolbar above the board, with the palette/history still beside it. Below 600px, content stacks vertically and remains scrollable.
+- The palette is removed from the layout in Play mode and replaced by the move log in **exactly the same right panel**. No puzzle mechanic, solver, draft schema, or exit choice was changed.
+- **Save** offers Beginner, Medium, Hard, Crazy. A separate local slot is stored for each difficulty, and the latest draft is restored on opening.
+- The 7×7 board keeps exactly one active exit, on board row 3 or row 4. The historical gate names remain J5 and J6 for saved-puzzle compatibility.
+
+**Appearance (top bar):** tap the theme button to cycle **Light → Dark → Auto → Light** (from the default Auto, first tap chooses Light). Light uses bright board, controls, palette, move log, and panels; Dark uses deep navy surfaces and brighter contrast. Auto follows the device's light/dark setting and updates when that setting changes. An explicit Light or Dark choice is saved on this device using `mrl-theme`, independent of the signed-in player or puzzle draft. Auto removes the stored override. The choice applies instantly without reloading.
 
 **Mouse or touch:** drag a module from the tray onto the board, or select a module and tap a board cell. Drag a placed piece to reposition it. Template copies are unlimited except the single red locomotive. Overlaps and out-of-board positions are blocked.
 
@@ -44,7 +51,7 @@ Play mode starts only if the puzzle passes layout validation, including having o
 
 ### Grid layout correction — 2026-10-16
 
-CSS Grid requires a space in span placement syntax: `grid-column:3 / span 7` and `grid-row:3 / span 7`, not `/span7`. Earlier rules used invalid named-line syntax (for example, `span2`, `span3`, `span7`), causing oversized grid items, overlapping row controls and a board extending off-screen. All 36 instances were corrected; the planned 11-column layout and the existing game logic are unchanged.
+Historical grid layout (superseded by the compact three-column workspace): CSS Grid requires a space in span placement syntax: `grid-column:3 / span 7` and `grid-row:3 / span 7`, not `/span7`. Earlier rules used invalid named-line syntax (for example, `span2`, `span3`, `span7`), causing oversized grid items, overlapping row controls and a board extending off-screen. All 36 instances were corrected; the planned 11-column layout and the existing game logic are unchanged.
 
 **Chromium layout check at 1,672px viewport:** board now fits in C3–I9 at 1,064 × 1,064px, with no horizontal page overflow. Also checked representative 1,024px and 390px viewport sizes. Check the actual deployed site and mobile touch controls separately.
 
@@ -73,7 +80,7 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v7`.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v8`.
 - The root game menu is **not** updated. The page is only a prototype, not a playable game.
 - Firestore security rules are unchanged. No levels or results are uploaded.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
