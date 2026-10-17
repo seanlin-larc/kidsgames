@@ -81,9 +81,39 @@ function repairPieceLabels(list) {
   }
   return list;
 }
+// Red is always reserved for X. All other new blocks use a non-red hue.
+// Exclude the 30-degree range centered on 0°/360° (345° through 15°).
+const MIN_BLOCK_HUE = 16, MAX_BLOCK_HUE = 344;
+const validBlockHue = hue => Number.isInteger(hue) && hue >= MIN_BLOCK_HUE && hue <= MAX_BLOCK_HUE;
+function randomBlockHue(list = pieces) {
+  const used = list.filter(p => p.type !== "red" && validBlockHue(p.hue)).map(p => p.hue);
+  let bestHue = MIN_BLOCK_HUE, bestDistance = -1;
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const hue = MIN_BLOCK_HUE + Math.floor(Math.random() * (MAX_BLOCK_HUE - MIN_BLOCK_HUE + 1));
+    const minDistance = used.length ?
+      Math.min(...used.map(other => Math.min(Math.abs(hue-other), 360-Math.abs(hue-other)))) : 180;
+    if (minDistance > bestDistance) { bestHue = hue; bestDistance = minDistance; }
+    if (minDistance >= 30) break;
+  }
+  return bestHue;
+}
+function colorizePieces(list) {
+  // Upgrade old saved puzzles without colors; never recolor a valid saved hue.
+  for (const p of list) {
+    if (p.type === "red") { delete p.hue; continue; }
+    if (!validBlockHue(p.hue)) p.hue = randomBlockHue(list);
+  }
+  return list;
+}
+function paintPiece(el, type, hue) {
+  if (type !== "red" && validBlockHue(hue)) {
+    // Fixed saturation/lightness keep dark lettering readable across all hues.
+    el.style.backgroundColor = "hsl(" + hue + " 67% 73%)";
+  }
+}
 const portraitPhone = () => window.matchMedia("(max-width: 600px) and (orientation: portrait)").matches;
 let pieces = [], nextId = 1, difficulty = "Beginner", exitRow = 2; // J5 selected by default
-let selectedTemplate = null, selectedId = null, undoStack = [], redoStack = [];
+let selectedTemplate = null, selectedHue = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
 let storageKey = null;
 let mode = "build", playStart = null, playMoves = 0, playWon = false;
@@ -110,7 +140,7 @@ function fits(testPiece, exceptId = null) {
 function snapshot() { return { pieces:clone(pieces), nextId, difficulty, exitRow }; }
 function applySnapshot(s) {
   pieces = clone(s.pieces); nextId = s.nextId; difficulty = s.difficulty; exitRow = s.exitRow;
-  selectedId = null; selectedTemplate = null; invalidateTest(); render();
+  selectedId = null; selectedTemplate = null; selectedHue = null; invalidateTest(); render();
 }
 function recordEdit() {
   undoStack.push(snapshot());
@@ -126,10 +156,12 @@ function invalidateTest() {
   $("test").disabled = false;
   clearHover();
 }
-function selectTemplate(type) {
+function selectTemplate(type, hue = null) {
   if (mode !== "build") return;
   $("mobilePicker").hidden = true;
   selectedTemplate = selectedTemplate === type ? null : type;
+  selectedHue = selectedTemplate === null || type === "red" ? null :
+    (validBlockHue(hue) ? hue : randomBlockHue());
   selectedId = null;
   render();
   status(selectedTemplate ? "Selected " + TEMPLATES[type].name + ". Drag it to the board or tap a cell." : "No module selected.");
@@ -137,10 +169,11 @@ function selectTemplate(type) {
 function selectPiece(id) {
   selectedId = id;
   selectedTemplate = null;
+  selectedHue = null;
   render();
   status("Selected " + byId(id)?.id + ". Drag to reposition, use arrow keys, or remove.");
 }
-function addTemplate(type, x, y) {
+function addTemplate(type, x, y, hue = selectedHue) {
   if (mode !== "build") return;
   const t = TEMPLATES[type];
   if (!t) return;
@@ -149,12 +182,14 @@ function addTemplate(type, x, y) {
   if (!label) return status("No available labels for this block type. Remove an existing one first.");
   if (type === "red" && ![2,3].includes(y)) return status("The red locomotive can only be placed in board row 3 or 4.");
   const p = { id:type === "red" ? "red" : type + "-" + nextId, type, x, y, w:t.w, h:t.h, axis:t.axis, label };
+  if (type !== "red") p.hue = validBlockHue(hue) ? hue : randomBlockHue();
   if (!fits(p)) return status("This module does not fit. Choose an empty area.");
   recordEdit();
   if (type !== "red") nextId++;
   pieces.push(p);
   if (type === "red") exitRow = y;
   selectedTemplate = null;
+  selectedHue = null;
   selectedId = p.id;
   modified("Added " + t.name);
 }
@@ -351,6 +386,7 @@ function makePiece(p) {
   const t = TEMPLATES[p.type] || TEMPLATES.h2;
   const el = document.createElement("div");
   el.className = "piece " + t.color + (p.id === selectedId ? " selected" : "");
+  paintPiece(el, p.type, p.hue);
   el.style.left = (p.x / 7 * 100) + "%";
   el.style.top = (p.y / 7 * 100) + "%";
   el.style.width = (p.w / 7 * 100) + "%";
@@ -438,6 +474,8 @@ function updateFloatingTemplate() {
   const t = TEMPLATES[type];
   const letter = nextPieceLabel(type);
   el.className = "piece floating-template " + t.color;
+  el.style.backgroundColor = "";
+  paintPiece(el, type, selectedHue);
   el.style.width = t.w * cellSize() + "px";
   el.style.height = t.h * cellSize() + "px";
   el.querySelector(".piece-label").textContent = letter || "—";
@@ -490,6 +528,7 @@ function startMobileHold(event) {
     if (mobileHold !== h || mode !== "build") return;
     h.opened = true;
     selectedTemplate = null;
+    selectedHue = null;
     selectedId = null;
     $("mobilePicker").hidden = false;
     render();
@@ -510,6 +549,7 @@ document.querySelectorAll("[data-mobile-template]").forEach(btn=>btn.addEventLis
     closeMobilePicker();status("All labels for that block type are already used.");return;
   }
   selectedTemplate = type;
+  selectedHue = type === "red" ? null : randomBlockHue();
   selectedId = null;
   closeMobilePicker();
   render();
@@ -544,6 +584,9 @@ function templateAnchor(clientX, clientY, type) {
 }
 function beginDrag(event, data) {
   if (event.button !== 0 || pointerDrag || (mode === "play" && data.kind !== "play")) return;
+  if (data.kind === "palette" && data.type !== "red" && !validBlockHue(data.hue)) {
+    data.hue = data.mobileFloating && validBlockHue(selectedHue) ? selectedHue : randomBlockHue();
+  }
   event.preventDefault();
   // The board stays mounted when the selected piece is re-rendered; capture its pointer for touch reliability.
   if (data.kind === "board" || data.kind === "play") {
@@ -554,11 +597,12 @@ function beginDrag(event, data) {
   document.addEventListener("pointerup", dragEnd);
   document.addEventListener("pointercancel", dragCancel);
 }
-function createPreview(type, piece = null) {
+function createPreview(type, piece = null, hue = null) {
   const t = TEMPLATES[type];
   const w = piece?.w || t.w, h = piece?.h || t.h;
   dragPreview = document.createElement("div");
   dragPreview.className = "piece dragging " + t.color;
+  paintPiece(dragPreview, type, piece?.hue ?? hue);
   const label = document.createElement("span");
   label.className = "piece-label";
   label.textContent = piece?.label || nextPieceLabel(type) || t.label;
@@ -577,7 +621,7 @@ function dragMove(event) {
   if (dist > 6) d.moved = true;
   if (!d.moved) return;
   if (d.kind === "palette") {
-    if (!dragPreview) createPreview(d.type);
+    if (!dragPreview) createPreview(d.type, null, d.hue);
     dragPreview.style.left = (event.clientX - TEMPLATES[d.type].w * cellSize()/2) + "px";
     dragPreview.style.top = (event.clientY - TEMPLATES[d.type].h * cellSize()/2) + "px";
     if (insideBoard(event.clientX,event.clientY)) {
@@ -635,10 +679,10 @@ function dragEnd(event) {
   if (!d || event.pointerId !== d.pointerId) return;
   finishDrag();
   if (d.kind === "palette") {
-    if (!d.moved && !d.mobileFloating) selectTemplate(d.type);
-    else if (d.proposed && insideBoard(event.clientX,event.clientY)) addTemplate(d.type,d.proposed.x,d.proposed.y);
+    if (!d.moved && !d.mobileFloating) selectTemplate(d.type, d.hue);
+    else if (d.proposed && insideBoard(event.clientX,event.clientY)) addTemplate(d.type,d.proposed.x,d.proposed.y,d.hue);
     if (d.mobileFloating && !insideBoard(event.clientX,event.clientY)) {
-      selectedTemplate = null;render();status("Discarded the floating block.");
+      selectedTemplate = null; selectedHue = null; render();status("Discarded the floating block.");
     } else if (d.mobileFloating) updateFloatingTemplate();
   } else if (d.kind === "play") {
     if (d.moved && d.proposed) slidePlayable(d.id,d.proposed.dx,d.proposed.dy);
@@ -871,8 +915,12 @@ $("importFile").addEventListener("change",async event=>{
         throw Error("Invalid module in the file.");
       }
       ids.add(p.id);
+      if (p.hue !== undefined && p.type !== "red" && !validBlockHue(p.hue)) {
+        throw Error("Invalid block hue. Allowed hue range is 16–344°.");
+      }
       imported.push({id:p.id,type:p.type,x:p.x,y:p.y,w:p.w,h:p.h,axis:p.axis,
-        label:typeof p.label === "string" ? p.label : undefined});
+        label:typeof p.label === "string" ? p.label : undefined,
+        ...(p.type !== "red" && validBlockHue(p.hue) ? {hue:p.hue} : {})});
     }
     // A draft may lack its red locomotive, but it must still fit and have no overlaps.
     for (let i=0;i<imported.length;i++) {
@@ -885,7 +933,7 @@ $("importFile").addEventListener("change",async event=>{
     }
     recordEdit();
     repairPieceLabels(imported);
-    pieces=imported; difficulty=normalizeTier(data.difficulty);
+    pieces=colorizePieces(imported); difficulty=normalizeTier(data.difficulty);
     // A red locomotive always determines which exit is open.
     exitRow = imported.find(p => p.id==="red")?.y ?? data.exitRow ?? 2;
     nextId=Math.max(1,...pieces.map(p=>Number(p.id.match(/[0-9]+$/)?.[0]||0)+1));
@@ -902,7 +950,7 @@ if (ctx) {
     if (saved?.format==="move-red-loco-editor-v1" && Array.isArray(saved.pieces) && TIERS.includes(normalizeTier(saved.difficulty))) {
       // Use the same constrained import validation for saved drafts at the next explicit import.
       // Local drafts contain only this editor's own schema.
-      pieces=repairPieceLabels(saved.pieces); difficulty=normalizeTier(saved.difficulty);
+      pieces=colorizePieces(repairPieceLabels(saved.pieces)); difficulty=normalizeTier(saved.difficulty);
       // Legacy drafts always align the gate to the locomotive when present.
       exitRow = pieces.find(p=>p.id==="red" && [2,3].includes(p.y))?.y ??
         ([2,3].includes(saved.exitRow) ? saved.exitRow : 2);
