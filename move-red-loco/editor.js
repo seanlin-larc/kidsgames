@@ -56,8 +56,30 @@ const TEMPLATES = Object.freeze({
   v3:       { type:"v3",       w:1, h:3, axis:"v",    color:"purple", label:"V3",  name:"Tall train" },
   platform: { type:"platform", w:2, h:2, axis:"both", color:"slate", label:"P",   name:"Square platform" }
 });
-const TIERS = ["Beginner","Medium","Hard","Crazy"];
-const normalizeTier = tier => tier === "Intermediate" ? "Medium" : tier;
+// Difficulty is creator-selected metadata; solvability and move counts are independent.
+const TIERS = ["Starter","Beginner","Amateur","Pro","Freak"];
+const LEGACY_TIERS = Object.freeze({
+  Intermediate:"Amateur", Medium:"Amateur", Hard:"Pro", Crazy:"Freak"
+});
+const normalizeTier = tier => LEGACY_TIERS[tier] || tier;
+function migrateTierSlots(key) {
+  // Keep old slots untouched for safety; only create the replacement when absent.
+  const oldSlots = {medium:"Amateur",hard:"Pro",crazy:"Freak"};
+  for (const [oldName, newTier] of Object.entries(oldSlots)) {
+    const newKey = key + ":" + newTier.toLowerCase();
+    if (localStorage.getItem(newKey) !== null) continue;
+    const old = localStorage.getItem(key + ":" + oldName);
+    if (!old) continue;
+    try {
+      const data = JSON.parse(old);
+      if (data.format !== "move-red-loco-editor-v1" || !Array.isArray(data.pieces)) continue;
+      const pieces = colorizePieces(repairPieceLabels(clone(data.pieces)));
+      localStorage.setItem(newKey,JSON.stringify({ ...data,difficulty:newTier,pieces }));
+    } catch (_) {
+      // A malformed legacy slot must not stop login or overwrite another draft.
+    }
+  }
+}
 const LABEL_GROUPS = Object.freeze({
   red:"X", h2:"ABCDEFGHIJKL", v2:"ABCDEFGHIJKL",
   h3:"OPQRS", v3:"OPQRS", platform:"UV"
@@ -112,7 +134,7 @@ function paintPiece(el, type, hue) {
   }
 }
 const portraitPhone = () => window.matchMedia("(max-width: 600px) and (orientation: portrait)").matches;
-let pieces = [], nextId = 1, difficulty = "Beginner", exitRow = 2; // J5 selected by default
+let pieces = [], nextId = 1, difficulty = "Starter", exitRow = 2; // J5 selected by default
 let selectedTemplate = null, selectedHue = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
 let storageKey = null;
@@ -946,14 +968,18 @@ const ctx = await enterGame({ bar:$("playerBar") });
 if (ctx) {
   storageKey = "mrl-editor-v1:" + ctx.player.uid;
   try {
+    migrateTierSlots(storageKey);
     const saved = JSON.parse(localStorage.getItem(storageKey));
     if (saved?.format==="move-red-loco-editor-v1" && Array.isArray(saved.pieces) && TIERS.includes(normalizeTier(saved.difficulty))) {
       // Use the same constrained import validation for saved drafts at the next explicit import.
       // Local drafts contain only this editor's own schema.
       // Persist the color migration so existing puzzles do not change hues on reload.
       const needsColorMigration = saved.pieces.some(p => p.type !== "red" && !validBlockHue(p.hue));
-      pieces=colorizePieces(repairPieceLabels(saved.pieces)); difficulty=normalizeTier(saved.difficulty);
-      if (needsColorMigration) localStorage.setItem(storageKey, JSON.stringify({ ...saved, pieces }));
+      const updatedDifficulty = normalizeTier(saved.difficulty);
+      pieces=colorizePieces(repairPieceLabels(saved.pieces)); difficulty=updatedDifficulty;
+      if (needsColorMigration || updatedDifficulty !== saved.difficulty) {
+        localStorage.setItem(storageKey, JSON.stringify({ ...saved,difficulty:updatedDifficulty,pieces }));
+      }
       // Legacy drafts always align the gate to the locomotive when present.
       exitRow = pieces.find(p=>p.id==="red" && [2,3].includes(p.y))?.y ??
         ([2,3].includes(saved.exitRow) ? saved.exitRow : 2);
