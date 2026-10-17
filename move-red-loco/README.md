@@ -42,6 +42,12 @@ The interface uses a responsive 11-column sheet with up to 2560 px width and at 
 
 Play mode starts only if the puzzle passes layout validation, including having one red locomotive. This is a **workshop preview**, not the released game.
 
+### Grid layout correction — 2026-10-16
+
+CSS Grid requires a space in span placement syntax: `grid-column:3 / span 7` and `grid-row:3 / span 7`, not `/span7`. Earlier rules used invalid named-line syntax (for example, `span2`, `span3`, `span7`), causing oversized grid items, overlapping row controls and a board extending off-screen. All 36 instances were corrected; the planned 11-column layout and the existing game logic are unchanged.
+
+**Chromium layout check at 1,672px viewport:** board now fits in C3–I9 at 1,064 × 1,064px, with no horizontal page overflow. Also checked representative 1,024px and 390px viewport sizes. Check the actual deployed site and mobile touch controls separately.
+
 ## Test instructions
 
 1. Open the site while online and sign in on the homepage first. Then open the workshop URL above.
@@ -67,7 +73,7 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v6`.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v7`.
 - The root game menu is **not** updated. The page is only a prototype, not a playable game.
 - Firestore security rules are unchanged. No levels or results are uploaded.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
