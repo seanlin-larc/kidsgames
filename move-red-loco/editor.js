@@ -1,0 +1,428 @@
+import { validatePuzzle } from "./solver.js";
+import { enterGame } from "../shared/gate.js";
+
+const board = document.getElementById("board");
+const $ = id => document.getElementById(id);
+const TEMPLATES = Object.freeze({
+  red:      { type:"red",      w:2, h:1, axis:"h",    color:"red",    label:"RED", name:"Red locomotive" },
+  h2:       { type:"h2",       w:2, h:1, axis:"h",    color:"blue",   label:"H2",  name:"Short train" },
+  v2:       { type:"v2",       w:1, h:2, axis:"v",    color:"green",  label:"V2",  name:"Vertical train" },
+  h3:       { type:"h3",       w:3, h:1, axis:"h",    color:"gold",   label:"H3",  name:"Long train" },
+  v3:       { type:"v3",       w:1, h:3, axis:"v",    color:"purple", label:"V3",  name:"Tall train" },
+  platform: { type:"platform", w:2, h:2, axis:"both", color:"slate", label:"P",   name:"Square platform" }
+});
+const TIERS = ["Beginner","Intermediate","Hard","Crazy"];
+let pieces = [], nextId = 1, difficulty = "Beginner";
+let selectedTemplate = null, selectedId = null, undoStack = [], redoStack = [];
+let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
+let storageKey = null;
+const clone = data => JSON.parse(JSON.stringify(data));
+const cellSize = () => board.getBoundingClientRect().width / 7;
+const byId = id => pieces.find(p => p.id === id);
+const status = message => { $("status").textContent = message; };
+const boardRect = () => board.getBoundingClientRect();
+const insideBoard = (x,y) => { const r = boardRect(); return x >= r.left && x < r.right && y >= r.top && y < r.bottom; };
+
+function pointToCell(clientX, clientY) {
+  const r = boardRect(), size = r.width / 7;
+  return { x: Math.floor((clientX - r.left) / size), y: Math.floor((clientY - r.top) / size) };
+}
+function fits(testPiece, exceptId = null) {
+  if (testPiece.x < 0 || testPiece.y < 0 ||
+      testPiece.x + testPiece.w > 7 || testPiece.y + testPiece.h > 7) return false;
+  return !pieces.some(p => p.id !== exceptId &&
+    testPiece.x < p.x + p.w && testPiece.x + testPiece.w > p.x &&
+    testPiece.y < p.y + p.h && testPiece.y + testPiece.h > p.y);
+}
+function snapshot() { return { pieces:clone(pieces), nextId, difficulty }; }
+function applySnapshot(s) {
+  pieces = clone(s.pieces); nextId = s.nextId; difficulty = s.difficulty;
+  selectedId = null; selectedTemplate = null; invalidateTest(); render();
+}
+function recordEdit() {
+  undoStack.push(snapshot());
+  if (undoStack.length > 75) undoStack.shift();
+  redoStack = [];
+}
+function modified(message) { invalidateTest(); render(); status(message + " · Unsaved changes."); }
+function invalidateTest() {
+  testRequest++;
+  if (worker) { worker.terminate(); worker = null; }
+  $("testResult").textContent = "—";
+  $("testResult").className = "";
+  $("test").disabled = false;
+  clearHover();
+}
+function selectTemplate(type) {
+  selectedTemplate = selectedTemplate === type ? null : type;
+  selectedId = null;
+  render();
+  status(selectedTemplate ? "Selected " + TEMPLATES[type].name + ". Drag it to the board or tap a cell." : "No module selected.");
+}
+function selectPiece(id) {
+  selectedId = id;
+  selectedTemplate = null;
+  render();
+  status("Selected " + byId(id)?.id + ". Drag to reposition, use arrow keys, or remove.");
+}
+function addTemplate(type, x, y) {
+  const t = TEMPLATES[type];
+  if (!t) return;
+  if (type === "red" && byId("red")) return status("Only one red locomotive is allowed.");
+  const p = { id:type === "red" ? "red" : type + "-" + nextId, type, x, y, w:t.w, h:t.h, axis:t.axis };
+  if (!fits(p)) return status("This module does not fit. Choose an empty area.");
+  recordEdit();
+  if (type !== "red") nextId++;
+  pieces.push(p);
+  selectedTemplate = null;
+  selectedId = p.id;
+  modified("Added " + t.name);
+}
+function movePiece(id, x, y) {
+  const p = byId(id);
+  if (!p || (p.x === x && p.y === y)) return;
+  if (!fits({ ...p, x, y }, id)) return status("Blocked placement. Modules cannot overlap or leave the board.");
+  recordEdit();
+  p.x = x; p.y = y;
+  modified("Moved " + p.id);
+}
+function rotateSelected() {
+  const p = byId(selectedId);
+  if (!p) return;
+  if (p.type === "red" || p.type === "platform") return status("This module has no alternate orientation.");
+  const rotated = { ...p, w:p.h, h:p.w, axis:p.axis === "h" ? "v" : "h" };
+  if (!fits(rotated, p.id)) return status("Rotation is blocked at this location.");
+  recordEdit();
+  Object.assign(p, { w:rotated.w, h:rotated.h, axis:rotated.axis });
+  modified("Rotated " + p.id);
+}
+function removeSelected() {
+  if (!selectedId) return;
+  const id = selectedId;
+  recordEdit();
+  pieces = pieces.filter(p => p.id !== id);
+  selectedId = null;
+  modified("Removed " + id);
+}
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(snapshot());
+  applySnapshot(undoStack.pop());
+  status("Undo completed.");
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(snapshot());
+  applySnapshot(redoStack.pop());
+  status("Redo completed.");
+}
+
+function makePiece(p) {
+  const t = TEMPLATES[p.type] || TEMPLATES.h2;
+  const el = document.createElement("div");
+  el.className = "piece " + t.color + (p.id === selectedId ? " selected" : "");
+  el.style.left = (p.x / 7 * 100) + "%";
+  el.style.top = (p.y / 7 * 100) + "%";
+  el.style.width = (p.w / 7 * 100) + "%";
+  el.style.height = (p.h / 7 * 100) + "%";
+  el.dataset.pieceId = p.id;
+  el.setAttribute("role", "gridcell");
+  el.setAttribute("aria-label", t.name + " at column " + (p.x + 1) + " row " + (p.y + 1));
+  const label = document.createElement("span");
+  label.className = "piece-label";
+  label.textContent = t.label;
+  el.appendChild(label);
+  return el;
+}
+function render() {
+  board.querySelectorAll(".piece").forEach(el => el.remove());
+  for (const p of pieces) board.appendChild(makePiece(p));
+  document.querySelectorAll(".palette-card").forEach(el => {
+    const active = el.dataset.template === selectedTemplate;
+    el.classList.toggle("active", active);
+    el.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll(".difficulty").forEach(el => el.setAttribute("aria-pressed", String(el.dataset.difficulty === difficulty)));
+  $("undo").disabled = !undoStack.length;
+  $("redo").disabled = !redoStack.length;
+  $("remove").disabled = !selectedId;
+  $("rotate").disabled = !selectedId || ["red","platform"].includes(byId(selectedId)?.type);
+  $("clearSelection").disabled = !selectedId && !selectedTemplate;
+  const p = byId(selectedId);
+  $("selectedInfo").textContent = p ? TEMPLATES[p.type].name + " (" + p.id + ") at " + String.fromCharCode(65+p.x) + (p.y+1) : selectedTemplate
+    ? "Module selected: " + TEMPLATES[selectedTemplate].name : "Select a train to move, rotate or remove it.";
+}
+function clearHover() { board.querySelectorAll(".tile").forEach(tile => tile.classList.remove("drop-ok","drop-no")); }
+function highlightFootprint(p, valid) {
+  clearHover();
+  for (let yy = p.y; yy < p.y+p.h; yy++) for (let xx=p.x;xx<p.x+p.w;xx++) {
+    const el = board.querySelector('.tile[data-x="' + xx + '"][data-y="' + yy + '"]');
+    if (el) el.classList.add(valid ? "drop-ok" : "drop-no");
+  }
+}
+function templateAnchor(clientX, clientY, type) {
+  const at = pointToCell(clientX, clientY), t = TEMPLATES[type];
+  return { ...at, x:at.x - Math.floor((t.w-1)/2), y:at.y - Math.floor((t.h-1)/2) };
+}
+function beginDrag(event, data) {
+  if (event.button !== 0 || pointerDrag) return;
+  event.preventDefault();
+  pointerDrag = { ...data, pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, moved:false, proposed:null };
+  document.addEventListener("pointermove", dragMove);
+  document.addEventListener("pointerup", dragEnd);
+  document.addEventListener("pointercancel", dragCancel);
+}
+function createPreview(type) {
+  const t = TEMPLATES[type];
+  dragPreview = document.createElement("div");
+  dragPreview.className = "piece dragging " + t.color;
+  const label = document.createElement("span");
+  label.className = "piece-label";
+  label.textContent = t.label;
+  dragPreview.appendChild(label);
+  dragPreview.style.position = "fixed";
+  dragPreview.style.zIndex = "1000";
+  dragPreview.style.pointerEvents = "none";
+  dragPreview.style.width = (t.w * cellSize()) + "px";
+  dragPreview.style.height = (t.h * cellSize()) + "px";
+  document.body.appendChild(dragPreview);
+}
+function dragMove(event) {
+  const d = pointerDrag;
+  if (!d || event.pointerId !== d.pointerId) return;
+  const dist = Math.hypot(event.clientX-d.startX, event.clientY-d.startY);
+  if (dist > 6) d.moved = true;
+  if (!d.moved) return;
+  if (d.kind === "palette") {
+    if (!dragPreview) createPreview(d.type);
+    dragPreview.style.left = (event.clientX + 10) + "px";
+    dragPreview.style.top = (event.clientY + 10) + "px";
+    if (insideBoard(event.clientX,event.clientY)) {
+      const pos = templateAnchor(event.clientX,event.clientY,d.type);
+      d.proposed = pos;
+      const t = TEMPLATES[d.type];
+      const valid = fits({ ...t, ...pos }) && (d.type !== "red" || !byId("red"));
+      highlightFootprint({ ...t, ...pos }, valid);
+    } else { d.proposed = null; clearHover(); }
+  } else {
+    const size = cellSize();
+    const dx = Math.round((event.clientX - d.startX) / size), dy = Math.round((event.clientY - d.startY) / size);
+    const piece = byId(d.id);
+    if (!piece) return;
+    d.proposed = { x:d.originX + dx, y:d.originY + dy };
+    const valid = fits({ ...piece, ...d.proposed }, d.id);
+    highlightFootprint({ ...piece, ...d.proposed }, valid);
+    const original = board.querySelector('.piece[data-piece-id="' + d.id + '"]');
+    if (original) original.classList.toggle("invalid", !valid);
+  }
+}
+function finishDrag() {
+  document.removeEventListener("pointermove",dragMove);
+  document.removeEventListener("pointerup",dragEnd);
+  document.removeEventListener("pointercancel",dragCancel);
+  if (dragPreview) { dragPreview.remove(); dragPreview = null; }
+  clearHover();
+  board.querySelectorAll(".piece.invalid").forEach(el=>el.classList.remove("invalid"));
+  pointerDrag = null;
+}
+function dragEnd(event) {
+  const d = pointerDrag;
+  if (!d || event.pointerId !== d.pointerId) return;
+  finishDrag();
+  if (d.kind === "palette") {
+    if (!d.moved) selectTemplate(d.type);
+    else if (d.proposed && insideBoard(event.clientX,event.clientY)) addTemplate(d.type,d.proposed.x,d.proposed.y);
+  } else if (d.moved && d.proposed) movePiece(d.id,d.proposed.x,d.proposed.y);
+}
+function dragCancel() { finishDrag(); }
+
+for (let y=0;y<7;y++) for (let x=0;x<7;x++) {
+  const cell = document.createElement("div");
+  cell.className = "tile";
+  cell.dataset.x = x; cell.dataset.y = y;
+  cell.setAttribute("role","gridcell");
+  cell.setAttribute("aria-label","Column " + String.fromCharCode(65+x) + ", row " + (y+1));
+  board.appendChild(cell);
+}
+document.querySelectorAll(".palette-card").forEach(el=>{
+  el.addEventListener("pointerdown", e=>beginDrag(e,{kind:"palette",type:el.dataset.template}));
+  el.addEventListener("keydown", e=>{
+    if (e.key==="Enter" || e.key===" ") { e.preventDefault(); selectTemplate(el.dataset.template); }
+  });
+});
+board.addEventListener("pointerdown", event=>{
+  if (event.button !== 0) return;
+  const pieceEl = event.target.closest(".piece");
+  if (pieceEl) {
+    const p = byId(pieceEl.dataset.pieceId);
+    if (!p) return;
+    selectPiece(p.id);
+    beginDrag(event,{kind:"board",id:p.id,originX:p.x,originY:p.y});
+  } else {
+    if (selectedTemplate) {
+      const pos = templateAnchor(event.clientX,event.clientY,selectedTemplate);
+      addTemplate(selectedTemplate,pos.x,pos.y);
+    } else if (selectedId) {
+      const cell = pointToCell(event.clientX,event.clientY);
+      movePiece(selectedId,cell.x,cell.y);
+    }
+    board.focus({ preventScroll:true });
+  }
+});
+document.querySelectorAll(".difficulty").forEach(btn=>btn.addEventListener("click",()=>{
+  if (difficulty === btn.dataset.difficulty) return;
+  recordEdit();
+  difficulty = btn.dataset.difficulty;
+  modified("Difficulty set to " + difficulty);
+}));
+$("reset").addEventListener("click",()=>{
+  if (!pieces.length) return;
+  if (!confirm("Remove every module from this puzzle? You can still Undo.")) return;
+  recordEdit(); pieces=[]; selectedId=null; selectedTemplate=null;
+  modified("Cleared the board");
+});
+$("undo").addEventListener("click",undo);
+$("redo").addEventListener("click",redo);
+$("rotate").addEventListener("click",rotateSelected);
+$("remove").addEventListener("click",removeSelected);
+$("clearSelection").addEventListener("click",()=>{ selectedId=null; selectedTemplate=null; render();status("Selection cleared."); });
+document.addEventListener("keydown", e=>{
+  const tag = e.target?.tagName;
+  if (["INPUT","TEXTAREA","SELECT"].includes(tag)) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==="z") {
+    e.preventDefault(); if(e.shiftKey) redo(); else undo(); return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==="y") { e.preventDefault(); redo(); return; }
+  if (e.key==="Escape") { selectedId=null; selectedTemplate=null; render();return; }
+  if (e.key==="Delete" || e.key==="Backspace") { if (selectedId) {e.preventDefault();removeSelected();}return; }
+  if (e.key.toLowerCase()==="r" && !e.ctrlKey && !e.metaKey) { if (selectedId) {e.preventDefault();rotateSelected();}return; }
+  const dirs = { ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1] };
+  if (dirs[e.key] && selectedId) {
+    e.preventDefault();
+    const p = byId(selectedId), [dx,dy] = dirs[e.key];
+    if (p) movePiece(p.id,p.x+dx,p.y+dy);
+  }
+});
+
+$("test").addEventListener("click",()=>{
+  const errors = validatePuzzle(pieces);
+  if (errors.length) {
+    $("testResult").textContent = "!";
+    $("testResult").className = "bad";
+    status("Cannot test: " + errors.join(" "));
+    return;
+  }
+  invalidateTest();
+  const id = ++testRequest;
+  $("testResult").textContent = "…";
+  $("testResult").className = "busy";
+  $("test").disabled = true;
+  status("Searching for the shortest solution. Each slide counts as one move.");
+  worker = new Worker("./solver-worker.js",{type:"module"});
+  worker.onmessage = event=>{
+    if (id !== testRequest || event.data.requestId !== id) return;
+    if (event.data.type === "progress") {
+      status("Searching… " + event.data.progress.visited.toLocaleString() + " states found.");
+      return;
+    }
+    const result = event.data.result;
+    worker?.terminate(); worker=null; $("test").disabled=false;
+    if (result.status==="solved") {
+      $("testResult").textContent = result.steps + " steps";
+      $("testResult").className = "ok";
+      status("Solvable in " + result.steps + " moves (optimal). Searched " + result.visited.toLocaleString() + " states.");
+    } else if (result.status==="unsolvable") {
+      $("testResult").textContent="X";
+      $("testResult").className="bad";
+      status("Unsolvable: every reachable board state was checked (" + result.visited.toLocaleString() + ").");
+    } else if (result.status==="limit") {
+      $("testResult").textContent="?";
+      $("testResult").className="busy";
+      status("Inconclusive. Search reached " + result.maxStates.toLocaleString() + " explored states. This does not prove unsolvability.");
+    } else {
+      $("testResult").textContent="!";
+      $("testResult").className="bad";
+      status("Test error: " + (result.message || (result.errors||[]).join("; ")));
+    }
+  };
+  worker.onerror = error=>{
+    if (id!==testRequest) return;
+    worker?.terminate();worker=null;$("test").disabled=false;
+    $("testResult").textContent="!";$("testResult").className="bad";
+    status("Solver could not start: " + error.message);
+  };
+  worker.postMessage({requestId:id,pieces:clone(pieces)});
+});
+
+function documentData() {
+  return { format:"move-red-loco-editor-v1", difficulty, pieces:clone(pieces) };
+}
+$("save").addEventListener("click",()=>{
+  try {
+    localStorage.setItem(storageKey,JSON.stringify({ ...documentData(), nextId, savedAt:new Date().toISOString() }));
+    status("Draft saved on this device for this player. Export JSON for a portable copy.");
+  } catch(error) { status("Could not save locally: " + error.message); }
+});
+$("export").addEventListener("click",()=>{
+  const data = JSON.stringify(documentData(),null,2)+"\n";
+  const blob = new Blob([data],{type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download="move-red-loco-" + difficulty.toLowerCase() + ".json";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  status("Exported puzzle JSON. Saved files contain no account data.");
+});
+$("import").addEventListener("click",()=>$("importFile").click());
+$("importFile").addEventListener("change",async event=>{
+  const file=event.target.files?.[0];
+  event.target.value="";
+  if (!file) return;
+  try {
+    if (file.size > 100000) throw Error("File is too large.");
+    const data=JSON.parse(await file.text());
+    if (data.format!=="move-red-loco-editor-v1" || !TIERS.includes(data.difficulty) ||
+        !Array.isArray(data.pieces) || data.pieces.length>35) throw Error("Not a supported puzzle file.");
+    const ids=new Set(), imported=[];
+    for (const p of data.pieces) {
+      const t=TEMPLATES[p.type];
+      if (!t || typeof p.id!=="string" || p.id.length>45 || ids.has(p.id) ||
+          (p.type==="red" ? p.id!=="red" : !/^(h2|v2|h3|v3|platform)-[0-9]+$/.test(p.id)) ||
+          ![p.x,p.y,p.w,p.h].every(Number.isInteger) || p.w<1 || p.h<1 ||
+          ((p.w===t.w && p.h===t.h) ? p.axis!==t.axis :
+           (p.type==="red" || p.type==="platform" || p.w!==t.h || p.h!==t.w || p.axis!==(t.axis==="h"?"v":"h")))) {
+        throw Error("Invalid module in the file.");
+      }
+      ids.add(p.id);
+      imported.push({id:p.id,type:p.type,x:p.x,y:p.y,w:p.w,h:p.h,axis:p.axis});
+    }
+    // A draft may lack its red locomotive, but it must still fit and have no overlaps.
+    for (let i=0;i<imported.length;i++) {
+      const p=imported[i];
+      if (p.x<0||p.y<0||p.x+p.w>7||p.y+p.h>7 ||
+          imported.slice(0,i).some(q=>p.x<q.x+q.w&&p.x+p.w>q.x&&p.y<q.y+q.h&&p.y+p.h>q.y)) {
+        throw Error("The file contains overlapping or off-board modules.");
+      }
+    }
+    recordEdit();
+    pieces=imported; difficulty=data.difficulty;
+    nextId=Math.max(1,...pieces.map(p=>Number(p.id.match(/[0-9]+$/)?.[0]||0)+1));
+    selectedId=null;selectedTemplate=null;
+    modified("Imported " + pieces.length + " modules");
+  } catch(error) { status("Import rejected: " + error.message); }
+});
+
+const ctx = await enterGame({ bar:$("playerBar") });
+if (ctx) {
+  storageKey = "mrl-editor-v1:" + ctx.player.uid;
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey));
+    if (saved?.format==="move-red-loco-editor-v1" && Array.isArray(saved.pieces) && TIERS.includes(saved.difficulty)) {
+      // Use the same constrained import validation for saved drafts at the next explicit import.
+      // Local drafts contain only this editor's own schema.
+      pieces=saved.pieces; difficulty=saved.difficulty; nextId=saved.nextId || 1;
+      status("Restored locally saved draft for " + ctx.player.code + ".");
+    }
+  } catch(error) { status("Could not restore saved draft."); }
+  render();
+}
