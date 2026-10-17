@@ -127,6 +127,64 @@ function redo() {
   status("Redo completed.");
 }
 
+function slidePlayable(id, dx, dy) {
+  if (mode !== "play" || playWon) return;
+  const result = attemptSlide(pieces, id, dx, dy, exitRow);
+  if (result.status === "blocked") {
+    status("That slide is blocked. Trains move on their own axis; platforms move one axis per slide.");
+    return;
+  }
+  if (result.status === "won") {
+    playWon = true; playMoves++;
+    selectedId = null;
+    render();
+    status("The red locomotive escaped through J" + (exitRow + 4) + " in " + playMoves + " moves. Switch to Build to restore your puzzle.");
+    return;
+  }
+  const p = byId(id);
+  if (!p) return;
+  p.x = result.x;
+  p.y = result.y;
+  playMoves++;
+  render();
+  status("Play preview: " + playMoves + " moves. Use the active exit when the right-side path is clear.");
+}
+function exitPlayable() {
+  if (mode !== "play" || playWon) return;
+  const result = attemptExit(pieces, exitRow);
+  if (result.status === "won") slidePlayable("red", 8 - byId("red").x - byId("red").w, 0);
+  else status("The red locomotive must have an empty path to the selected exit.");
+}
+function setMode(next) {
+  if (next === mode) return;
+  if (pointerDrag) finishDrag();
+  closeSaveMenu();
+  if (next === "play") {
+    const errors = validatePuzzle(pieces, exitRow);
+    if (errors.length) {
+      status("Complete the puzzle before Play: " + errors.join(" "));
+      return;
+    }
+    playStart = snapshot();
+    pieces = clone(pieces);
+    playMoves = 0;
+    playWon = false;
+    selectedId = null; selectedTemplate = null;
+    mode = "play";
+    invalidateTest();
+    render();
+    status("Play preview: drag trains along their tracks. Tap the open exit to finish. Editing is disabled.");
+  } else {
+    mode = "build";
+    if (playStart) applySnapshot(playStart);
+    playStart = null; playWon = false; playMoves = 0;
+    render();
+    status("Returned to Build. Your original puzzle is restored; preview moves were not saved.");
+  }
+}
+$("buildMode").addEventListener("click",()=>setMode("build"));
+$("playMode").addEventListener("click",()=>setMode("play"));
+
 function makePiece(p) {
   const t = TEMPLATES[p.type] || TEMPLATES.h2;
   const el = document.createElement("div");
