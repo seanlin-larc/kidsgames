@@ -84,7 +84,7 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v9`.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v10`.
 - The root game menu is **not** updated. The page is only a prototype, not a playable game.
 - Firestore security rules are unchanged. No levels or results are uploaded.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
