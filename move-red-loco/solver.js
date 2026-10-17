@@ -1,12 +1,13 @@
 // Move The Red Locomotive: deterministic layout validator and shortest-slide solver.
 // One translation of any distance along a valid axis = one move; exiting = one move.
-// The draft supports a right-side gate on row 3 or 4 (zero-based board rows 2 or 3).
+// Each puzzle selects exactly one right-side gate: J6 (board row 3) or J7 (row 4).
 export const BOARD_SIZE = 7;
 export const EXIT_ROWS = [2, 3];
 export const MAX_STATES = 200000;
 
-export function validatePuzzle(pieces) {
+export function validatePuzzle(pieces, exitRow) {
   const errors = [];
+  if (!EXIT_ROWS.includes(exitRow)) errors.push("Select exactly one exit: J6 or J7.");
   const occupancy = Array(49).fill(null);
   if (!Array.isArray(pieces)) return ["Puzzle data is not an array."];
   const seen = new Set();
@@ -45,8 +46,8 @@ export function validatePuzzle(pieces) {
   return [...new Set(errors)];
 }
 
-export function solvePuzzle(pieces, maxStates = MAX_STATES, onProgress = () => {}) {
-  const errors = validatePuzzle(pieces);
+export function solvePuzzle(pieces, exitRow, maxStates = MAX_STATES, onProgress = () => {}) {
+  const errors = validatePuzzle(pieces, exitRow);
   if (errors.length) return { status: "invalid", errors };
   const models = pieces.map(p => ({ id: p.id, w: p.w, h: p.h, axis: p.axis }));
   const start = pieces.map(p => p.y * 7 + p.x);
@@ -69,7 +70,7 @@ export function solvePuzzle(pieces, maxStates = MAX_STATES, onProgress = () => {
 
     // The locomotive may exit in one horizontal move when the entire right corridor is clear.
     const rx = positions[redIndex] % 7, ry = Math.floor(positions[redIndex] / 7);
-    if (EXIT_ROWS.includes(ry)) {
+    if (ry === exitRow) {
       let clear = true;
       for (let x = rx + models[redIndex].w; x < 7; x++) {
         if (occupancy[ry * 7 + x]) { clear = false; break; }
