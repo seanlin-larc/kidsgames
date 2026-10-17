@@ -58,12 +58,37 @@ const TEMPLATES = Object.freeze({
 });
 const TIERS = ["Beginner","Medium","Hard","Crazy"];
 const normalizeTier = tier => tier === "Intermediate" ? "Medium" : tier;
+const LABEL_GROUPS = Object.freeze({
+  red:"X", h2:"ABCDEFGHIJKL", v2:"ABCDEFGHIJKL",
+  h3:"OPQRS", v3:"OPQRS", platform:"UV"
+});
+const labelGroup = type => ["h2","v2"].includes(type) ? "short" :
+  ["h3","v3"].includes(type) ? "long" : type;
+function nextPieceLabel(type, list = pieces) {
+  if (type === "red") return "X";
+  const pool = LABEL_GROUPS[type];
+  const used = new Set(list.filter(p => labelGroup(p.type) === labelGroup(type)).map(p => p.label));
+  return [...pool].find(letter => !used.has(letter)) || null;
+}
+function repairPieceLabels(list) {
+  const used = {short:new Set(),long:new Set(),platform:new Set(),red:new Set()};
+  for (const p of list) {
+    const group = labelGroup(p.type), pool = LABEL_GROUPS[p.type];
+    if (!pool) throw Error("Unknown piece type.");
+    if (!pool.includes(p.label) || used[group].has(p.label)) p.label = [...pool].find(x => !used[group].has(x));
+    if (!p.label) throw Error("Too many pieces of type " + group + " (label slots exhausted).");
+    used[group].add(p.label);
+  }
+  return list;
+}
+const portraitPhone = () => window.matchMedia("(max-width: 600px) and (orientation: portrait)").matches;
 let pieces = [], nextId = 1, difficulty = "Beginner", exitRow = 2; // J5 selected by default
 let selectedTemplate = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
 let storageKey = null;
 let mode = "build", playStart = null, playMoves = 0, playWon = false;
 let playHistory = [], replaying = false, replayGeneration = 0;
+let mobileHold = null;
 const clone = data => JSON.parse(JSON.stringify(data));
 const cellSize = () => board.getBoundingClientRect().width / 7;
 const byId = id => pieces.find(p => p.id === id);
@@ -103,6 +128,7 @@ function invalidateTest() {
 }
 function selectTemplate(type) {
   if (mode !== "build") return;
+  $("mobilePicker").hidden = true;
   selectedTemplate = selectedTemplate === type ? null : type;
   selectedId = null;
   render();
@@ -119,11 +145,15 @@ function addTemplate(type, x, y) {
   const t = TEMPLATES[type];
   if (!t) return;
   if (type === "red" && byId("red")) return status("Only one red locomotive is allowed.");
-  const p = { id:type === "red" ? "red" : type + "-" + nextId, type, x, y, w:t.w, h:t.h, axis:t.axis };
+  const label = nextPieceLabel(type);
+  if (!label) return status("No available labels for this block type. Remove an existing one first.");
+  if (type === "red" && ![2,3].includes(y)) return status("The red locomotive can only be placed in board row 3 or 4.");
+  const p = { id:type === "red" ? "red" : type + "-" + nextId, type, x, y, w:t.w, h:t.h, axis:t.axis, label };
   if (!fits(p)) return status("This module does not fit. Choose an empty area.");
   recordEdit();
   if (type !== "red") nextId++;
   pieces.push(p);
+  if (type === "red") exitRow = y;
   selectedTemplate = null;
   selectedId = p.id;
   modified("Added " + t.name);
@@ -132,10 +162,12 @@ function movePiece(id, x, y) {
   if (mode !== "build") return;
   const p = byId(id);
   if (!p || (p.x === x && p.y === y)) return;
+  if (p.type === "red" && ![2,3].includes(y)) return status("Red locomotive must stay on exit row 3 or 4.");
   if (!fits({ ...p, x, y }, id)) return status("Blocked placement. Modules cannot overlap or leave the board.");
   recordEdit();
   p.x = x; p.y = y;
-  modified("Moved " + p.id);
+  if (p.type === "red") exitRow = y;
+  modified("Moved " + (p.label || p.id));
 }
 function rotateSelected() {
   if (mode !== "build") return;
@@ -326,7 +358,7 @@ function makePiece(p) {
   el.setAttribute("aria-label", t.name + " at column " + (p.x + 1) + " row " + (p.y + 1));
   const label = document.createElement("span");
   label.className = "piece-label";
-  label.textContent = t.label;
+  label.textContent = p.label || (p.type === "red" ? "X" : t.label);
   el.appendChild(label);
   return el;
 }
@@ -339,6 +371,7 @@ function render() {
     el.setAttribute("aria-pressed", String(active));
   });
   document.querySelector(".sheet").dataset.mode = mode;
+  if (mode !== "play") document.querySelector(".sheet").dataset.mobileLog = "closed";
   $("buildMode").setAttribute("aria-pressed", String(mode === "build"));
   $("playMode").setAttribute("aria-pressed", String(mode === "play"));
   $("playInfo").textContent = mode === "build" ? "Build mode" : replaying ? "Replaying…" : playWon ? "Solved!" : "Playing";
@@ -375,6 +408,7 @@ function render() {
       (Number(el.dataset.exitRow) === exitRow ? "Try exiting through this gate" : "Closed exit") :
       "Select exit J" + (Number(el.dataset.exitRow) + 3));
   });
+  updateFloatingTemplate();
   const p = byId(selectedId);
   $("selectedInfo").textContent = mode === "play" ? "Play preview — editing tools are disabled." :
     p ? TEMPLATES[p.type].name + " (" + p.id + ") at " + String.fromCharCode(65+p.x) + (p.y+1) : selectedTemplate
@@ -389,8 +423,10 @@ function highlightFootprint(p, valid) {
   }
 }
 function templateAnchor(clientX, clientY, type) {
-  const at = pointToCell(clientX, clientY), t = TEMPLATES[type];
-  return { ...at, x:at.x - Math.floor((t.w-1)/2), y:at.y - Math.floor((t.h-1)/2) };
+  const t = TEMPLATES[type], r = boardRect(), size = cellSize();
+  // Center of dragged block follows the pointer, including even-width blocks.
+  return { x:Math.round((clientX-r.left)/size - t.w/2),
+    y:Math.round((clientY-r.top)/size - t.h/2) };
 }
 function beginDrag(event, data) {
   if (event.button !== 0 || pointerDrag || (mode === "play" && data.kind !== "play")) return;
@@ -410,7 +446,7 @@ function createPreview(type) {
   dragPreview.className = "piece dragging " + t.color;
   const label = document.createElement("span");
   label.className = "piece-label";
-  label.textContent = t.label;
+  label.textContent = nextPieceLabel(type) || t.label;
   dragPreview.appendChild(label);
   dragPreview.style.position = "fixed";
   dragPreview.style.zIndex = "1000";
@@ -427,13 +463,13 @@ function dragMove(event) {
   if (!d.moved) return;
   if (d.kind === "palette") {
     if (!dragPreview) createPreview(d.type);
-    dragPreview.style.left = (event.clientX + 10) + "px";
-    dragPreview.style.top = (event.clientY + 10) + "px";
+    dragPreview.style.left = (event.clientX - TEMPLATES[d.type].w * cellSize()/2) + "px";
+    dragPreview.style.top = (event.clientY - TEMPLATES[d.type].h * cellSize()/2) + "px";
     if (insideBoard(event.clientX,event.clientY)) {
       const pos = templateAnchor(event.clientX,event.clientY,d.type);
       d.proposed = pos;
       const t = TEMPLATES[d.type];
-      const valid = fits({ ...t, ...pos }) && (d.type !== "red" || !byId("red"));
+      const valid = fits({ ...t, ...pos }) && (d.type !== "red" || (![2,3].includes(pos.y) ? false : !byId("red")));
       highlightFootprint({ ...t, ...pos }, valid);
     } else { d.proposed = null; clearHover(); }
   } else if (d.kind === "play") {
@@ -450,12 +486,15 @@ function dragMove(event) {
     if (outcome.status === "moved") highlightFootprint({ ...piece, x:outcome.x,y:outcome.y },true);
     else clearHover();
   } else {
-    const size = cellSize();
-    const dx = Math.round((event.clientX - d.startX) / size), dy = Math.round((event.clientY - d.startY) / size);
+    const size = cellSize(), r = boardRect();
     const piece = byId(d.id);
     if (!piece) return;
-    d.proposed = { x:d.originX + dx, y:d.originY + dy };
-    const valid = fits({ ...piece, ...d.proposed }, d.id);
+    d.proposed = {
+      x:Math.round((event.clientX-r.left)/size - piece.w/2),
+      y:Math.round((event.clientY-r.top)/size - piece.h/2)
+    };
+    const valid = fits({ ...piece, ...d.proposed }, d.id) &&
+      (piece.type !== "red" || [2,3].includes(d.proposed.y));
     highlightFootprint({ ...piece, ...d.proposed }, valid);
     const original = board.querySelector('.piece[data-piece-id="' + d.id + '"]');
     if (original) original.classList.toggle("invalid", !valid);
@@ -479,6 +518,8 @@ function dragEnd(event) {
     else if (d.proposed && insideBoard(event.clientX,event.clientY)) addTemplate(d.type,d.proposed.x,d.proposed.y);
   } else if (d.kind === "play") {
     if (d.moved && d.proposed) slidePlayable(d.id,d.proposed.dx,d.proposed.dy);
+  } else if (d.moved && mode === "build" && portraitPhone() && !insideBoard(event.clientX,event.clientY)) {
+    selectedId = d.id; removeSelected();
   } else if (d.moved && d.proposed) movePiece(d.id,d.proposed.x,d.proposed.y);
 }
 function dragCancel() { finishDrag(); }
@@ -694,7 +735,8 @@ $("importFile").addEventListener("change",async event=>{
         throw Error("Invalid module in the file.");
       }
       ids.add(p.id);
-      imported.push({id:p.id,type:p.type,x:p.x,y:p.y,w:p.w,h:p.h,axis:p.axis});
+      imported.push({id:p.id,type:p.type,x:p.x,y:p.y,w:p.w,h:p.h,axis:p.axis,
+        label:typeof p.label === "string" ? p.label : undefined});
     }
     // A draft may lack its red locomotive, but it must still fit and have no overlaps.
     for (let i=0;i<imported.length;i++) {
@@ -705,9 +747,10 @@ $("importFile").addEventListener("change",async event=>{
       }
     }
     recordEdit();
+    repairPieceLabels(imported);
     pieces=imported; difficulty=normalizeTier(data.difficulty);
-    // Legacy v1 drafts had no exit selection; preserve their red locomotive row.
-    exitRow = data.exitRow ?? imported.find(p => p.id==="red" && [2,3].includes(p.y))?.y ?? 2;
+    // A red locomotive always determines which exit is open.
+    exitRow = imported.find(p => p.id==="red")?.y ?? data.exitRow ?? 2;
     nextId=Math.max(1,...pieces.map(p=>Number(p.id.match(/[0-9]+$/)?.[0]||0)+1));
     selectedId=null;selectedTemplate=null;
     modified("Imported " + pieces.length + " modules");
@@ -722,9 +765,10 @@ if (ctx) {
     if (saved?.format==="move-red-loco-editor-v1" && Array.isArray(saved.pieces) && TIERS.includes(normalizeTier(saved.difficulty))) {
       // Use the same constrained import validation for saved drafts at the next explicit import.
       // Local drafts contain only this editor's own schema.
-      pieces=saved.pieces; difficulty=normalizeTier(saved.difficulty);
-      exitRow = [2,3].includes(saved.exitRow) ? saved.exitRow :
-        saved.pieces.find(p=>p.id==="red" && [2,3].includes(p.y))?.y ?? 2;
+      pieces=repairPieceLabels(saved.pieces); difficulty=normalizeTier(saved.difficulty);
+      // Legacy drafts always align the gate to the locomotive when present.
+      exitRow = pieces.find(p=>p.id==="red" && [2,3].includes(p.y))?.y ??
+        ([2,3].includes(saved.exitRow) ? saved.exitRow : 2);
       nextId=saved.nextId || 1;
       status("Restored locally saved draft for " + ctx.player.code + ".");
     }
