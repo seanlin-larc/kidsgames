@@ -950,7 +950,10 @@ if (ctx) {
     if (saved?.format==="move-red-loco-editor-v1" && Array.isArray(saved.pieces) && TIERS.includes(normalizeTier(saved.difficulty))) {
       // Use the same constrained import validation for saved drafts at the next explicit import.
       // Local drafts contain only this editor's own schema.
+      // Persist the color migration so existing puzzles do not change hues on reload.
+      const needsColorMigration = saved.pieces.some(p => p.type !== "red" && !validBlockHue(p.hue));
       pieces=colorizePieces(repairPieceLabels(saved.pieces)); difficulty=normalizeTier(saved.difficulty);
+      if (needsColorMigration) localStorage.setItem(storageKey, JSON.stringify({ ...saved, pieces }));
       // Legacy drafts always align the gate to the locomotive when present.
       exitRow = pieces.find(p=>p.id==="red" && [2,3].includes(p.y))?.y ??
         ([2,3].includes(saved.exitRow) ? saved.exitRow : 2);
