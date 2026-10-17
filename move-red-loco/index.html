@@ -208,17 +208,15 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
  .move-log{min-height:220px;max-height:370px}
 }
 
-/* All six block samples use the same cell unit regardless of card dimensions. */
-.palette-card { --unit:21px; }
-.palette-card[data-template="red"],.palette-card[data-template="h2"]{--bw:2;--bh:1}
-.palette-card[data-template="v2"]{--bw:1;--bh:2}
-.palette-card[data-template="h3"]{--bw:3;--bh:1}
-.palette-card[data-template="v3"]{--bw:1;--bh:3}
-.palette-card[data-template="platform"]{--bw:2;--bh:2}
+/* All six block samples share a 21px cell unit. Explicit pixel dimensions
+   avoid relying on browser support for CSS calc multiplication. */
 .palette-card .sample,.palette-card .sample.vertical,.palette-card .sample.square {
- width:calc(var(--unit) * var(--bw));height:calc(var(--unit) * var(--bh));
- min-width:0;min-height:0;flex:none;
+ width:42px;height:21px;min-width:0;min-height:0;flex:none;
 }
+#item-v2 .sample {width:21px;height:42px}
+#item-h3 .sample {width:63px;height:21px}
+#item-v3 .sample {width:21px;height:63px}
+#item-platform .sample {width:42px;height:42px}
 #mobileMoves,.mobile-picker,.floating-template{display:none}
 .mobile-picker{position:absolute;inset:auto 5% 14% 5%;z-index:15;padding:12px;
  background:var(--surface);border:2px solid var(--accent-border);border-radius:14px;
