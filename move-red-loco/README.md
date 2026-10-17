@@ -23,7 +23,7 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 - The centre board's maximum width responds to both viewport width and viewport height (`max-width:calc(100dvh - 168px)` on the board stage); the exit strip is 32px wide.
 - Below 980px, the controls become a compact toolbar above the board. In **portrait phone view (max-width 600px)**, Reset/Undo/Redo/Save are **above** the board, while Build/Play, Test/Moves, Replay and selection tools appear **below** it. The persistent palette card is hidden on portrait phones; the game retains its 7×7 board.
 - On desktop, the palette is replaced by the move history in **exactly the same right panel** in Play mode. On portrait phones, the move history is accessed by a **Moves button over the board** and opens a scrollable flyout instead of using permanent screen space.
-- **Save** offers Beginner, Medium, Hard, Crazy. A separate local slot is stored for each difficulty, and the latest draft is restored on opening.
+- **Save** offers five creator-assigned difficulty levels: **Starter, Beginner, Amateur, Pro, Freak**. A separate local slot is stored for each level, and the latest draft is restored on opening. Difficulty ratings are not automatically calculated by the solver.
 - The red locomotive **X** can only be placed on board row 3 or 4. Adding or moving X automatically opens the matching exit gate (J5 or J6). Tapping the opposite exit in Build moves X to that row if space is available; otherwise the editor reports a blocked move.
 
 **Appearance (top bar):** tap the theme button to cycle **Light → Dark → Auto → Light** (from the default Auto, first tap chooses Light). Light uses bright board, controls, palette, move log, and panels; Dark uses deep navy surfaces and brighter contrast. Auto follows the device's light/dark setting and updates when that setting changes. An explicit Light or Dark choice is saved on this device using `mrl-theme`, independent of the signed-in player or puzzle draft. Auto removes the stored override. The choice applies instantly without reloading.
@@ -38,7 +38,9 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 
 **Keyboard:** use Tab and Enter to select a palette module. Use arrow keys to reposition a selected piece, R to rotate a non-red train, Delete to remove, Escape to deselect, Ctrl/Cmd+Z to undo, and Ctrl/Cmd+Shift+Z to redo.
 
-**Save flyout:** choose Save as Beginner, Medium, Hard, or Crazy. It stores both the latest per-player draft (`mrl-editor-v1:<uid>`) and one independent slot per tier (`mrl-editor-v1:<uid>:<tier>`). Saving again under the same tier overwrites that tier's previous slot. The last saved draft is restored on reopening. Export JSON contains the chosen tier and exit. Earlier drafts labeled Intermediate import as Medium. Older files with no exit select the red locomotive's row, otherwise J5. **No cloud puzzle saving, level library, or Firestore writes are implemented.**
+**Save flyout:** choose **Starter, Beginner, Amateur, Pro, or Freak**. Starter is the default for new workshop puzzles. The editor stores both the latest per-player draft (`mrl-editor-v1:<uid>`) and one independent slot per tier (`mrl-editor-v1:<uid>:<tier>`). Saving again under the same tier overwrites that tier's previous slot. The last saved draft is restored on reopening. Export JSON contains the selected tier and exit. Existing drafts retain **Beginner**; older **Medium** and **Intermediate** values become **Amateur**, **Hard** becomes **Pro**, and **Crazy** becomes **Freak**. Old per-tier slots are copied to the new name only when the destination does not exist; original old slots are preserved for safety. Old files without an exit select the red locomotive's row, otherwise J5. **No cloud puzzle saving, level library, Firestore writes, or automatic difficulty assessment are implemented.**
+
+**Difficulty policy:** tiers are editorial labels, not solver thresholds. Proposed player progression: Starter teaches single-piece movement; Beginner introduces blockers; Amateur introduces multiple dependencies and platforms; Pro requires planning and reversals; Freak contains the toughest original, human-reviewed challenges. The exact cutoffs and level counts remain unapproved and should be set after children test real puzzles. See the [session handoff and current decisions](https://github.com/seanlin-larc/notes-with-llm/blob/main/projects/kidsgame/2026-10-16_move-red-loco-session-handoff.md).
 
 **Test:** deterministic breadth-first search in a Web Worker. Only the **selected exit** is usable. Each straight slide counts as one move, regardless of distance. Exiting counts as one move. Platforms can slide horizontally or vertically. The worker stops after 200,000 expanded states and reports an **inconclusive** result rather than a false "X".
 
@@ -87,7 +89,7 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v11`.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v12`.
 - The root game menu is **not** updated. The page is only a prototype, not a playable game.
 - Firestore security rules are unchanged. No levels or results are uploaded.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
