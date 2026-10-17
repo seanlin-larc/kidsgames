@@ -19,6 +19,7 @@ let selectedTemplate = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
 let storageKey = null;
 let mode = "build", playStart = null, playMoves = 0, playWon = false;
+let playHistory = [], replaying = false, replayGeneration = 0;
 const clone = data => JSON.parse(JSON.stringify(data));
 const cellSize = () => board.getBoundingClientRect().width / 7;
 const byId = id => pieces.find(p => p.id === id);
@@ -127,36 +128,112 @@ function redo() {
   status("Redo completed.");
 }
 
+
+function renderMoveLog(activeIndex = -1, follow = false) {
+  const panel = $("moveLog"), list = $("moveLogList");
+  panel.hidden = mode !== "play";
+  if (panel.hidden) return;
+  const oldScroll = panel.scrollTop;
+  list.replaceChildren();
+  $("moveLogEmpty").hidden = playHistory.length !== 0;
+  const symbols = {right:"→",left:"←",up:"↑",down:"↓",exit:"⇥"};
+  playHistory.forEach((move, index) => {
+    const el = document.createElement("li");
+    const no = String(index + 1).padStart(2, "0");
+    const label = move.id === "red" ? "R" :
+      move.id.startsWith("platform") ? "P" : move.id.split("-")[0].toUpperCase();
+    el.textContent = no + " " + label + symbols[move.direction] +
+      (move.direction === "exit" ? "" : move.cells);
+    el.title = "Move " + (index + 1) + ": " + move.description;
+    el.setAttribute("aria-label", el.title);
+    if (activeIndex === index) el.classList.add("replay-current");
+    list.appendChild(el);
+  });
+  if (follow) panel.scrollTop = panel.scrollHeight;
+  else if (activeIndex >= 0) {
+    const entryHeight = panel.clientWidth / 2;
+    const top = entryHeight * activeIndex, bottom = top + entryHeight;
+    panel.scrollTop = bottom > oldScroll + panel.clientHeight ?
+      bottom - panel.clientHeight : top < oldScroll ? top : oldScroll;
+  } else panel.scrollTop = oldScroll;
+}
+function recordPlayMove(id, direction, cells, won) {
+  const piece = byId(id);
+  const title = piece ? TEMPLATES[piece.type]?.name || id : id;
+  const verb = {right:"right",left:"left",up:"up",down:"down",exit:"out"}[direction];
+  playHistory.push({
+    id, direction, cells, won, after:clone(pieces),
+    description:title + " " + verb + " " + cells + (cells === 1 ? " cell" : " cells")
+  });
+  playMoves = playHistory.length;
+}
 function slidePlayable(id, dx, dy) {
-  if (mode !== "play" || playWon) return;
+  if (mode !== "play" || playWon || replaying) return;
+  const piece = byId(id);
+  if (!piece) return;
+  const oldX = piece.x, oldY = piece.y;
   const result = attemptSlide(pieces, id, dx, dy, exitRow);
   if (result.status === "blocked") {
     status("That slide is blocked. Trains move on their own axis; platforms move one axis per slide.");
     return;
   }
   if (result.status === "won") {
-    playWon = true; playMoves++;
+    playWon = true;
     selectedId = null;
+    recordPlayMove(id, "exit", 8 - oldX - piece.w, true);
     render();
-    status("The red locomotive escaped through J" + (exitRow + 3) + " in " + playMoves + " moves. Switch to Build to restore your puzzle.");
+    renderMoveLog(-1, true);
+    status("The red locomotive escaped through J" + (exitRow + 3) +
+      " in " + playMoves + " moves. Replay to review your moves.");
     return;
   }
-  const p = byId(id);
-  if (!p) return;
-  p.x = result.x;
-  p.y = result.y;
-  playMoves++;
+  piece.x = result.x;
+  piece.y = result.y;
+  const direction = result.x > oldX ? "right" : result.x < oldX ? "left" :
+    result.y > oldY ? "down" : "up";
+  const cells = Math.abs(result.x - oldX) + Math.abs(result.y - oldY);
+  recordPlayMove(id, direction, cells, false);
   render();
-  status("Play preview: " + playMoves + " moves. Use the active exit when the right-side path is clear.");
+  renderMoveLog(-1, true);
+  status("Play preview: " + playMoves + " moves. Use the active exit when the path is clear.");
 }
 function exitPlayable() {
-  if (mode !== "play" || playWon) return;
+  if (mode !== "play" || playWon || replaying) return;
   const result = attemptExit(pieces, exitRow);
   if (result.status === "won") slidePlayable("red", 8 - byId("red").x - byId("red").w, 0);
   else status("The red locomotive must have an empty path to the selected exit.");
 }
+async function replayMoves() {
+  if (mode !== "play" || replaying || !playStart || !playHistory.length) return;
+  if (pointerDrag) finishDrag();
+  const generation = ++replayGeneration;
+  replaying = true;
+  selectedId = null;
+  pieces = clone(playStart.pieces);
+  playMoves = 0;
+  playWon = false;
+  render();
+  status("Replaying " + playHistory.length + " recorded moves.");
+  for (let i = 0; i < playHistory.length; i++) {
+    await new Promise(resolve => setTimeout(resolve, 550));
+    if (mode !== "play" || generation !== replayGeneration) return;
+    pieces = clone(playHistory[i].after);
+    playMoves = i + 1;
+    playWon = playHistory[i].won;
+    render();
+    renderMoveLog(i);
+  }
+  if (mode !== "play" || generation !== replayGeneration) return;
+  replaying = false;
+  render();
+  renderMoveLog(-1, true);
+  status("Replay finished: " + playHistory.length +
+    " moves shown. The final play position is restored.");
+}
 function setMode(next) {
   if (next === mode) return;
+  ++replayGeneration;
+  replaying = false;
   if (pointerDrag) finishDrag();
   closeSaveMenu();
   if (next === "play") {
@@ -169,21 +246,27 @@ function setMode(next) {
     pieces = clone(pieces);
     playMoves = 0;
     playWon = false;
-    selectedId = null; selectedTemplate = null;
+    playHistory = [];
+    selectedId = null;
+    selectedTemplate = null;
     mode = "play";
     invalidateTest();
     render();
-    status("Play preview: drag trains along their tracks. Tap the open exit to finish. Editing is disabled.");
+    status("Play: each legal slide counts as one move. Use Replay to review recorded moves.");
   } else {
     mode = "build";
     if (playStart) applySnapshot(playStart);
-    playStart = null; playWon = false; playMoves = 0;
+    playStart = null;
+    playWon = false;
+    playMoves = 0;
+    playHistory = [];
     render();
     status("Returned to Build. Your original puzzle is restored; preview moves were not saved.");
   }
 }
-$("buildMode").addEventListener("click",()=>setMode("build"));
-$("playMode").addEventListener("click",()=>setMode("play"));
+$("buildMode").addEventListener("click", () => setMode("build"));
+$("playMode").addEventListener("click", () => setMode("play"));
+$("replay").addEventListener("click", () => { void replayMoves(); });
 
 function makePiece(p) {
   const t = TEMPLATES[p.type] || TEMPLATES.h2;
@@ -213,7 +296,14 @@ function render() {
   document.querySelector(".sheet").dataset.mode = mode;
   $("buildMode").setAttribute("aria-pressed", String(mode === "build"));
   $("playMode").setAttribute("aria-pressed", String(mode === "play"));
-  $("playInfo").textContent = mode === "build" ? "Build mode" : playWon ? "Solved in " + playMoves + " moves!" : "Moves: " + playMoves;
+  $("playInfo").textContent = mode === "build" ? "Build mode" : replaying ? "Replaying…" : playWon ? "Solved!" : "Playing";
+  $("replay").disabled = mode !== "play" || replaying || playHistory.length === 0;
+  $("test").textContent = mode === "play" ? "Moves" : "Test";
+  if (mode === "play") {
+    $("testResult").textContent = String(playMoves);
+    $("testResult").className = "ok";
+  }
+  renderMoveLog();
   document.querySelectorAll(".palette-card").forEach(el => {
     el.setAttribute("aria-disabled", String(mode === "play"));
     el.tabIndex = mode === "play" ? -1 : 0;
@@ -228,7 +318,7 @@ function render() {
   $("undo").disabled = mode === "play" || !undoStack.length;
   $("redo").disabled = mode === "play" || !redoStack.length;
   $("save").disabled = mode === "play";
-  $("test").disabled = mode === "play" || !!worker;
+  $("test").disabled = mode === "build" && !!worker;
   document.querySelectorAll("#saveMenu button,.extras button,.details button").forEach(el => {
     el.disabled = mode === "play" || (el.id === "remove" && !selectedId) ||
       (el.id === "rotate" && (!selectedId || ["red","platform"].includes(byId(selectedId)?.type))) ||
@@ -367,7 +457,7 @@ board.addEventListener("pointerdown", event=>{
   const pieceEl = event.target.closest(".piece");
   if (pieceEl) {
     const p = byId(pieceEl.dataset.pieceId);
-    if (!p || (mode === "play" && playWon)) return;
+    if (!p || (mode === "play" && (playWon || replaying))) return;
     if (mode === "play") {
       selectedId = p.id; selectedTemplate = null; render();
       beginDrag(event,{kind:"play",id:p.id,originX:p.x,originY:p.y});
@@ -416,7 +506,7 @@ document.addEventListener("keydown", e=>{
   if (mode === "play") {
     if (e.key === "Escape") { selectedId = null; render(); return; }
     const dirs = { ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1] };
-    if (dirs[e.key] && selectedId && !playWon) {
+    if (dirs[e.key] && selectedId && !playWon && !replaying) {
       e.preventDefault(); slidePlayable(selectedId,...dirs[e.key]);
     }
     return;
@@ -437,6 +527,12 @@ document.addEventListener("keydown", e=>{
 });
 
 $("test").addEventListener("click",()=>{
+  if (mode === "play") {
+    const log = $("moveLog");
+    log.scrollTop = log.scrollHeight;
+    log.focus({ preventScroll:true });
+    return;
+  }
   if (mode !== "build") return;
   const errors = validatePuzzle(pieces, exitRow);
   if (errors.length) {
