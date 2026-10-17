@@ -1,13 +1,13 @@
 // Move The Red Locomotive: deterministic layout validator and shortest-slide solver.
 // One translation of any distance along a valid axis = one move; exiting = one move.
-// Each puzzle selects exactly one right-side gate: J6 (board row 3) or J7 (row 4).
+// Each puzzle selects exactly one right-side gate: J5 (board row 3) or J6 (row 4).
 export const BOARD_SIZE = 7;
 export const EXIT_ROWS = [2, 3];
 export const MAX_STATES = 200000;
 
 export function validatePuzzle(pieces, exitRow) {
   const errors = [];
-  if (!EXIT_ROWS.includes(exitRow)) errors.push("Select exactly one exit: J6 or J7.");
+  if (!EXIT_ROWS.includes(exitRow)) errors.push("Select exactly one exit: J5 or J6.");
   const occupancy = Array(49).fill(null);
   if (!Array.isArray(pieces)) return ["Puzzle data is not an array."];
   const seen = new Set();
