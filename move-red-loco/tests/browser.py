@@ -49,6 +49,8 @@ def load(browser, code="SL", saved=None, viewport=None):
     context = browser.new_context(viewport=viewport or dict(width=1200, height=900),
                                   service_workers="block", accept_downloads=True)
     context.route(ORIGIN + "/**", route_files)
+    # Keep these device-only regression checks independent of the deployed cloud flag.
+    context.route("**/library-config.js", lambda route: route.fulfill(content_type="text/javascript", body="export const LIBRARY_ENABLED=false;"))
     key = "mrl-editor-v1:uid-" + code
     seed = json.dumps(saved)
     context.add_init_script(f"""

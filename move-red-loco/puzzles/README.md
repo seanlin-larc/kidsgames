@@ -4,9 +4,9 @@
 The earlier convention of publishing a JSON file per puzzle is superseded.
 See [Firebase setup](../../firebase/PUZZLE_SETUP.md) for activation instructions.
 
-Cloud saving remains staged off until Sean publishes the prepared Firestore rules.
-Save keeps the existing device draft during setup.
-After activation, SL can save directly from the workshop.
+Cloud controls are enabled after Sean's report of rule publication.
+SL can save directly from the workshop when online.
+Save also keeps a device draft.
 The cloud library stores one document per puzzle.
 
 Download archive creates one JSON file containing the saved puzzles.

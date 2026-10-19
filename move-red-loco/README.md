@@ -1,21 +1,20 @@
 # Move The Red Locomotive
 
-**Status (2026-10-18): Puzzle Workshop linked from the game menu, with Build and Play preview. A curated library is not implemented.**
+**Status (2026-10-18): Puzzle Workshop linked from the game menu, with Build and Play preview. No reviewed puzzle set is bundled.**
 
 - [Open the Puzzle Workshop](https://seanlin-larc.github.io/kidsgames/move-red-loco/)
 - [Design plan and notes](https://github.com/seanlin-larc/notes-with-llm/blob/main/projects/kidsgame/2026-10-15_move-red-locomotive-plan.md)
 
 This is an **original puzzle editor**, inspired by the mechanical idea of Railroad RushHour. Do not copy commercial challenge arrangements or artwork into published levels.
 
-## Firestore library — prepared for activation
+## Firestore library — enabled
 
 Sean chose Firestore for puzzle storage, with JSON archive download and restore.
 This supersedes publishing puzzle JSON files through repository commits.
 See the [Firebase console instructions](../firebase/PUZZLE_SETUP.md).
 
-The cloud controls remain staged off until the prepared security rules are published.
-The existing device Save remains available during setup.
-After activation, Save also writes a named puzzle to Firestore when online.
+Cloud controls are enabled after Sean's report of rule publication.
+Save keeps a device draft and writes a named puzzle to Firestore when online.
 Each puzzle has a stable ID and a revision.
 Open library loads existing puzzles; New puzzle creates a separate layout.
 Only SL can Save, Download archive, or Restore archive through the interface.
@@ -37,8 +36,8 @@ All players can build, import a layout, and use Play preview.
 Existing drafts remain readable for other players, without automatic migration writes.
 This is a device interface restriction. GitHub permissions control repository publication.
 
-During setup, Save remains device-local. Export JSON downloads a portable single layout.
-Firestore replaces repository publication after activation. See [storage and archives](puzzles/README.md).
+Save keeps a local draft and attempts a cloud save when online. Export JSON downloads a portable single layout.
+Firestore replaces repository publication. See [storage and archives](puzzles/README.md).
 
 Save, Export, Import, and restore use the same layout checks.
 Invalid imported or saved data cannot partially replace the current puzzle.
@@ -80,7 +79,7 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 
 **Keyboard:** use Tab and Enter to select a palette module. Use arrow keys to reposition a selected piece, R to rotate a non-red train, Delete to remove, Escape to deselect, Ctrl/Cmd+Z to undo, and Ctrl/Cmd+Shift+Z to redo.
 
-**Save flyout:** choose **Starter, Beginner, Amateur, Pro, or Freak**. Starter is the default for new workshop puzzles. The editor stores both the latest per-player draft (`mrl-editor-v1:<uid>`) and one independent slot per tier (`mrl-editor-v1:<uid>:<tier>`). Saving again under the same tier overwrites that tier's previous slot. The last saved draft is restored on reopening. Export JSON contains the selected tier and exit. Existing drafts retain **Beginner**; older **Medium** and **Intermediate** values become **Amateur**, **Hard** becomes **Pro**, and **Crazy** becomes **Freak**. Old per-tier slots are copied to the new name only when the destination does not exist; original old slots are preserved for safety. Old files without an exit select the red locomotive's row, otherwise the upper exit. **No cloud puzzle saving, level library, Firestore writes, or automatic difficulty assessment are implemented.**
+**Save flyout:** choose **Starter, Beginner, Amateur, Pro, or Freak**. Starter is the default for new workshop puzzles. The editor stores both the latest per-player draft (`mrl-editor-v1:<uid>`) and one independent slot per tier (`mrl-editor-v1:<uid>:<tier>`). Saving again under the same tier overwrites that tier's previous slot. The last saved draft is restored on reopening. Export JSON contains the selected tier and exit. Existing drafts retain **Beginner**; older **Medium** and **Intermediate** values become **Amateur**, **Hard** becomes **Pro**, and **Crazy** becomes **Freak**. Old per-tier slots are copied to the new name only when the destination does not exist; original old slots are preserved for safety. Old files without an exit select the red locomotive's row, otherwise the upper exit. **Named cloud puzzle saves and the library are enabled. Difficulty remains creator-assigned.**
 
 **Difficulty policy:** tiers are editorial labels, not solver thresholds. Proposed player progression: Starter teaches single-piece movement; Beginner introduces blockers; Amateur introduces multiple dependencies and platforms; Pro requires planning and reversals; Freak contains the toughest original, human-reviewed challenges. The exact cutoffs and level counts remain unapproved and should be set after children test real puzzles. See the [session handoff and current decisions](https://github.com/seanlin-larc/notes-with-llm/blob/main/projects/kidsgame/2026-10-16_move-red-loco-session-handoff.md).
 
@@ -134,14 +133,14 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v14`.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v15`.
 - The root game menu links to the workshop. The curated player-facing game is future work.
-- Firestore security rules are unchanged. No levels or results are uploaded.
+- Firestore rules add family puzzle reads and SL-only writes. Workshop game results are not uploaded.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
 
 ## Future work
 
-Confirm target gate geometry and piece inventory. Review UI on a tablet. Add puzzle IDs and a curated library after the editor is accepted. Build the playable puzzle view separately.
+Confirm target gate geometry and piece inventory. Review UI on a tablet. Create and review original puzzles for the library. Build the playable puzzle view separately.
 
 
 ## Automated checks
@@ -153,4 +152,4 @@ Physical touch devices and real offline checkout still need acceptance testing.
 
 Run `node move-red-loco/tests/library.test.mjs` for archive and transaction checks.
 Run `python move-red-loco/tests/browser_library.py` for cloud UI checks with a simulated Firebase SDK.
-Cloud controls remain off in the deployed configuration until rule publication is confirmed.
+Cloud controls are enabled. Real Firebase Save and cross-device restore still need acceptance testing.

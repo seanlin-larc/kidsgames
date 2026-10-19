@@ -121,7 +121,7 @@ and the Firebase API key accepts only `seanlin-larc.github.io` and `localhost:80
 
 ## Puzzle library setup
 
-Move The Red Locomotive will use Firestore for its shared puzzle library.
-The code remains staged off until the prepared rules are published.
+Move The Red Locomotive uses Firestore for its shared puzzle library.
+Cloud controls are enabled after Sean's report of rule publication.
 See [Firebase console steps](firebase/PUZZLE_SETUP.md).
-Existing device drafts remain available during setup.
+Device drafts remain available when offline.

@@ -5,6 +5,14 @@ It stores one document per puzzle in `puzzleLibrary`.
 SL can save and restore puzzles.
 Approved family players can read puzzles.
 
+## Activation status
+
+Sean replied “publish.” after the request to confirm rule publication.
+ChatGPT treated that reply as confirmation and enabled the cloud controls.
+The site cache is `kidsgames-v15`.
+The live Firebase rules were not inspected directly.
+Real Firebase Save and restore still need the check below.
+
 ## Required console step
 
 1. Open [Firebase console for kidsgame-7a262](https://console.firebase.google.com/project/kidsgame-7a262/firestore).
@@ -26,9 +34,8 @@ The existing player documents are maintained through the console.
 Browser clients cannot change those documents.
 No UID needs to be copied into the game code.
 
-The app changes remain staged off until publication is confirmed.
-ChatGPT will then enable `LIBRARY_ENABLED` and refresh the site cache version.
-Until then, Save keeps the existing device draft.
+Cloud controls are enabled with `LIBRARY_ENABLED = true`.
+Save keeps a device draft and attempts a cloud save when online.
 
 ```mermaid
 flowchart LR
@@ -92,7 +99,7 @@ Archive download and restore always require a server connection.
 
 Local app tests simulate family identities and Firestore SDK responses.
 Emulator tests are included, but they were not run in this environment.
-Rule compilation remains unverified until the console checks the prepared file.
+Rule publication is based on Sean's reply; console compilation was not checked independently.
 Existing player and statistics rule text was checked against the repository and remains unchanged.
 These tests do not establish that the console rules were published.
 Real Firebase saving and cross-device restoration still need the activation check above.
