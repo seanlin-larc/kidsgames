@@ -1,5 +1,5 @@
 // Pure one-axis movement for Build/Play workshop preview.
-// A slide of any positive distance is one move; leaving the active gate is one move.
+// A slide of any positive distance is one move. The UI completes a clear exit path automatically.
 export function attemptSlide(pieces, id, dx, dy, exitRow) {
   const piece = pieces.find(p => p.id === id);
   if (!piece || !Number.isInteger(dx) || !Number.isInteger(dy) ||
@@ -36,3 +36,4 @@ export function attemptExit(pieces, exitRow) {
   const result = attemptSlide(pieces, "red", distance, 0, exitRow);
   return result.status === "won" ? result : { status: "blocked" };
 }
+

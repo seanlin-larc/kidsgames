@@ -1,11 +1,31 @@
 # Move The Red Locomotive
 
-**Status (2026-10-16): Puzzle Workshop prototype for testing. The playable game is not implemented.**
+**Status (2026-10-18): Puzzle Workshop linked from the game menu, with Build and Play preview. A curated library is not implemented.**
 
 - [Open the Puzzle Workshop](https://seanlin-larc.github.io/kidsgames/move-red-loco/)
 - [Design plan and notes](https://github.com/seanlin-larc/notes-with-llm/blob/main/projects/kidsgame/2026-10-15_move-red-locomotive-plan.md)
 
 This is an **original puzzle editor**, inspired by the mechanical idea of Railroad RushHour. Do not copy commercial challenge arrangements or artwork into published levels.
+
+## Save and JSON integrity — 2026-10-18
+
+Only **SL** can use Save or Export JSON. Other players see “Only SL can save a puzzle layout.”
+All players can build, import a layout, and use Play preview.
+Existing drafts remain readable for other players, without automatic migration writes.
+This is a device interface restriction. GitHub permissions control repository publication.
+
+Save remains device-local. Export JSON downloads a file for review and a GitHub commit.
+Reviewed layouts belong in [puzzles/](puzzles/README.md).
+The browser does not commit files to GitHub.
+
+Save, Export, Import, and restore use the same layout checks.
+Invalid imported or saved data cannot partially replace the current puzzle.
+Save verifies both the tier slot and latest slot.
+If either write fails, Save attempts to restore both previous values and reports the result.
+Block IDs derive from validated pieces instead of a saved counter.
+Older missing letters, colors, difficulty names, and exit fields remain supported.
+
+The board has seven rows and seven columns, without lines through cell centers.
 
 ## Compact workspace — Build / Play
 
@@ -15,7 +35,7 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 |---|---|---|
 | Header and top bar | Game title, Light/Dark/Auto appearance, player, offline, Check out, Sign out | Same |
 | **Left panel** | Reset, Undo, Redo, Save as flyout, Build/Play switch, Test result, guidance | Editor controls disabled; Build/Play, Replay, Moves, count |
-| **Centre** | Fixed 7×7 square grid with one selected right-side exit (J5 or J6) | Same board, with legal sliding interactions |
+| **Centre** | Fixed 7×7 square grid with one selected right-side exit (upper or lower) | Same board, with legal sliding interactions |
 | **Right panel** | Six draggable modules in a 2-column × 3-row palette, rotation/remove/deselect, JSON import/export | Scrollable log of every valid move, with highlighted Replay step |
 | Bottom status | Current editor message | Move, replay, or win message |
 
@@ -24,7 +44,7 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 - Below 980px, the controls become a compact toolbar above the board. In **portrait phone view (max-width 600px)**, Reset/Undo/Redo/Save are **above** the board, while Build/Play, Test/Moves, Replay and selection tools appear **below** it. The persistent palette card is hidden on portrait phones; the game retains its 7×7 board.
 - On desktop, the palette is replaced by the move history in **exactly the same right panel** in Play mode. On portrait phones, the move history is accessed by a **Moves button over the board** and opens a scrollable flyout instead of using permanent screen space.
 - **Save** offers five creator-assigned difficulty levels: **Starter, Beginner, Amateur, Pro, Freak**. A separate local slot is stored for each level, and the latest draft is restored on opening. Difficulty ratings are not automatically calculated by the solver.
-- The red locomotive **X** can only be placed on board row 3 or 4. Adding or moving X automatically opens the matching exit gate (J5 or J6). Tapping the opposite exit in Build moves X to that row if space is available; otherwise the editor reports a blocked move.
+- The red locomotive **X** can only be placed on board row 3 or 4. Adding or moving X automatically opens the matching exit gate. Tapping the opposite exit in Build moves X to that row if space is available; otherwise the editor reports a blocked move.
 
 **Appearance (top bar):** tap the theme button to cycle **Light → Dark → Auto → Light** (from the default Auto, first tap chooses Light). Light uses bright board, controls, palette, move log, and panels; Dark uses deep navy surfaces and brighter contrast. Auto follows the device's light/dark setting and updates when that setting changes. An explicit Light or Dark choice is saved on this device using `mrl-theme`, independent of the signed-in player or puzzle draft. Auto removes the stored override. The choice applies instantly without reloading.
 
@@ -38,20 +58,20 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 
 **Keyboard:** use Tab and Enter to select a palette module. Use arrow keys to reposition a selected piece, R to rotate a non-red train, Delete to remove, Escape to deselect, Ctrl/Cmd+Z to undo, and Ctrl/Cmd+Shift+Z to redo.
 
-**Save flyout:** choose **Starter, Beginner, Amateur, Pro, or Freak**. Starter is the default for new workshop puzzles. The editor stores both the latest per-player draft (`mrl-editor-v1:<uid>`) and one independent slot per tier (`mrl-editor-v1:<uid>:<tier>`). Saving again under the same tier overwrites that tier's previous slot. The last saved draft is restored on reopening. Export JSON contains the selected tier and exit. Existing drafts retain **Beginner**; older **Medium** and **Intermediate** values become **Amateur**, **Hard** becomes **Pro**, and **Crazy** becomes **Freak**. Old per-tier slots are copied to the new name only when the destination does not exist; original old slots are preserved for safety. Old files without an exit select the red locomotive's row, otherwise J5. **No cloud puzzle saving, level library, Firestore writes, or automatic difficulty assessment are implemented.**
+**Save flyout:** choose **Starter, Beginner, Amateur, Pro, or Freak**. Starter is the default for new workshop puzzles. The editor stores both the latest per-player draft (`mrl-editor-v1:<uid>`) and one independent slot per tier (`mrl-editor-v1:<uid>:<tier>`). Saving again under the same tier overwrites that tier's previous slot. The last saved draft is restored on reopening. Export JSON contains the selected tier and exit. Existing drafts retain **Beginner**; older **Medium** and **Intermediate** values become **Amateur**, **Hard** becomes **Pro**, and **Crazy** becomes **Freak**. Old per-tier slots are copied to the new name only when the destination does not exist; original old slots are preserved for safety. Old files without an exit select the red locomotive's row, otherwise the upper exit. **No cloud puzzle saving, level library, Firestore writes, or automatic difficulty assessment are implemented.**
 
 **Difficulty policy:** tiers are editorial labels, not solver thresholds. Proposed player progression: Starter teaches single-piece movement; Beginner introduces blockers; Amateur introduces multiple dependencies and platforms; Pro requires planning and reversals; Freak contains the toughest original, human-reviewed challenges. The exact cutoffs and level counts remain unapproved and should be set after children test real puzzles. See the [session handoff and current decisions](https://github.com/seanlin-larc/notes-with-llm/blob/main/projects/kidsgame/2026-10-16_move-red-loco-session-handoff.md).
 
-**Test:** deterministic breadth-first search in a Web Worker. Only the **selected exit** is usable. Each straight slide counts as one move, regardless of distance. Exiting counts as one move. Platforms can slide horizontally or vertically. The worker stops after 200,000 expanded states and reports an **inconclusive** result rather than a false "X".
+**Test:** deterministic breadth-first search in a Web Worker. Only the **selected exit** is usable. Each straight slide counts as one move, regardless of distance. A clear path to the active exit completes Play automatically. There is no extra exit move. Platforms can slide horizontally or vertically. The worker stops after 200,000 expanded states and reports an **inconclusive** result rather than a false "X".
 
-**Exit rule:** select **J5** (board row 3, zero-based 2) or **J6** (board row 4, zero-based 3). These labels shifted up one page row with the board; only one exit is active. The red locomotive must be a 2×1 horizontal piece on either of those rows. An attempt to escape through the closed exit fails. Exact physical gate geometry remains provisional.
+**Exit rule:** select the upper exit (board row 3, zero-based 2) or lower exit (board row 4, zero-based 3). Only one exit is active. The interface shows arrows without coordinate labels. The red locomotive must be a 2×1 horizontal piece on either of those rows. An attempt to escape through the closed exit fails. Exact physical gate geometry remains provisional.
 
 
 ### Build / Play preview
 
 **Build:** the default editor. Row 2, exit selection, Test, palette, module tools, Save flyout, Import, and Export work normally.
 
-**Play:** switching modes preserves a temporary copy of the Build arrangement. The editor controls in row 2 and palette/tools below are greyed out and disabled. I11 changes from Test to Moves; J11 shows the count. G11–H11 shows Replay. The K3–K9 move log has 14 half-row-height entries before scrolling. Each successful slide, including the final exit, adds one numbered entry with piece, direction, and travel distance; blocked attempts are not counted. The log scrolls to the newest move. Tap Moves to focus the log at its latest entry. Drag a train along its fixed axis, drag a platform along either single axis, or use arrow keys after selecting a train. Each valid slide counts as one move, regardless of distance. Tap the open exit when the red locomotive has a clear path to win.
+**Play:** switching modes preserves a temporary copy of the Build arrangement. The editor controls in row 2 and palette/tools below are greyed out and disabled. I11 changes from Test to Moves; J11 shows the count. G11–H11 shows Replay. The K3–K9 move log has 14 half-row-height entries before scrolling. Each successful slide adds one numbered entry with piece, direction, and travel distance; blocked attempts are not counted. The log scrolls to the newest move. Tap Moves to focus the log at its latest entry. Drag a train along its fixed axis, drag a platform along either single axis, or use arrow keys after selecting a train. Each valid slide counts as one move, regardless of distance. Play shows “Congratulations!” and “Solved in <move count> moves!” when the path to the active exit becomes clear. A clear starting board completes in zero moves.
 
 **Replay** animates the recorded sequence at 550 milliseconds per step. It highlights each history entry and updates the on-screen move count during playback. It restores the final Play arrangement and original log when it finishes. Switching back to Build cancels any replay, restores the original puzzle, and clears the preview move count. Play does not upload a result or modify stored drafts.
 
@@ -66,8 +86,8 @@ Historical grid layout (superseded by the compact three-column workspace): CSS G
 ## Test instructions
 
 1. Open the site while online and sign in on the homepage first. Then open the workshop URL above.
-2. Choose **J5** or **J6**. Place the red locomotive on the matching board row. Tap the other gate and verify that only one is open.
-3. Press **Test**: a clear matching exit should return **1 step**. Select the opposite exit in Build: X should move to that row automatically when unblocked. Confirm that the selected gate changes with X.
+2. Choose the upper or lower exit. Place the red locomotive on the matching board row. Tap the other gate and verify that only one is open.
+3. Press **Test**: a clear matching exit should return **0 steps**. Select the opposite exit in Build: X should move to that row automatically when unblocked. Confirm that the selected gate changes with X.
 4. Add a horizontal train in the same row, between the red locomotive and the gate. Test should return **X** if that train cannot leave the row.
 5. Place a vertical train across the exit path with room to slide clear. Test should report a nonzero solvable step count.
 6. Add two blocks of the same type and confirm they usually receive different colors, neither in the red hue band. Undo and Redo a placement, then Save, reload and compare colors. Export/Import the puzzle and verify colors persist. Import an older JSON draft without hue values and check that non-red pieces are recolored but X stays red.
@@ -83,17 +103,28 @@ move-red-loco/
 ├── README.md          This test guide
 ├── index.html         Compact responsive desktop/mobile UI and styles
 ├── editor.js          Build/Play UI, pointer interactions, save/import/export
+├── puzzle-data.js     Shared JSON and device draft validation
+├── puzzles/           Reviewed puzzle JSON files and publication instructions
+├── tests/             Storage, solver, and simulated-player browser checks
 ├── solver.js          Pure validation and breadth-first solver
 ├── play-rules.js      Pure legal movement and exit rules for Play preview
 └── solver-worker.js   Runs the solver without blocking the editor
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v12`.
-- The root game menu is **not** updated. The page is only a prototype, not a playable game.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v13`.
+- The root game menu links to the workshop. The curated player-facing game is future work.
 - Firestore security rules are unchanged. No levels or results are uploaded.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
 
 ## Future work
 
 Confirm target gate geometry and piece inventory. Review UI on a tablet. Add puzzle IDs and a curated library after the editor is accepted. Build the playable puzzle view separately.
+
+
+## Automated checks
+
+Run `node move-red-loco/tests/puzzle-data.test.mjs` from the repository root.
+Run `python move-red-loco/tests/browser.py` for Chromium checks with Playwright installed.
+The browser checks simulate family identities. They do not verify real Firebase sign-in.
+Physical touch devices and real offline checkout still need acceptance testing.

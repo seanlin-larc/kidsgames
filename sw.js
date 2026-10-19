@@ -8,7 +8,7 @@
 //
 // NEW GAME: add its folder (and any extra files) to PRECACHE below.
 
-const CACHE = "kidsgames-v12";
+const CACHE = "kidsgames-v13";
 const SDK = "https://www.gstatic.com/firebasejs/13.0.0/";
 const PRECACHE = [
   "./",
@@ -23,6 +23,7 @@ const PRECACHE = [
   "move-red-loco/solver.js",
   "move-red-loco/solver-worker.js",
   "move-red-loco/play-rules.js",
+  "move-red-loco/puzzle-data.js",
   SDK + "firebase-app.js",
   SDK + "firebase-auth.js",
   SDK + "firebase-firestore.js"
@@ -73,3 +74,4 @@ async function cacheFirst(req) {
   if (res.ok) cache.put(req, res.clone());
   return res;
 }
+

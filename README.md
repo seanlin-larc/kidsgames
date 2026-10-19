@@ -5,6 +5,7 @@ Brain-teasing games and puzzles for kids. Each game is a static web page. GitHub
 - Site: https://seanlin-larc.github.io/kidsgames/
 - Minesweeper: https://seanlin-larc.github.io/kidsgames/minesweeper/
 - Word Guess: https://seanlin-larc.github.io/kidsgames/word-guess/
+- Move The Red Locomotive workshop: https://seanlin-larc.github.io/kidsgames/move-red-loco/
 
 ## Folder structure
 
@@ -24,9 +25,11 @@ kidsgames/
 │   ├── reset-pin.mjs  Sets a new PIN for a player (see admin/README.md)
 │   ├── package.json
 │   └── README.md
-├── move-red-loco/      Puzzle Workshop prototype (not yet on the menu)
+├── move-red-loco/      Puzzle Workshop prototype (linked from the menu)
 │   ├── index.html      7×7 board editor
 │   ├── editor.js       Drag/drop and local drafts
+│   ├── puzzle-data.js  Shared JSON and device draft validation
+│   ├── puzzles/        Reviewed puzzle JSON files (see its README)
 │   ├── solver.js       BFS shortest-solution checker
 │   ├── play-rules.js   Valid Play moves and exit logic
 │   └── solver-worker.js
@@ -113,3 +116,4 @@ python -m http.server 8000
 
 Opening `index.html` from disk (`file://`) does not work: browsers block module scripts there,
 and the Firebase API key accepts only `seanlin-larc.github.io` and `localhost:8000`.
+

@@ -1,13 +1,13 @@
 // Move The Red Locomotive: deterministic layout validator and shortest-slide solver.
-// One translation of any distance along a valid axis = one move; exiting = one move.
-// Each puzzle selects exactly one right-side gate: J5 (board row 3) or J6 (row 4).
+// One translation of any distance along a valid axis = one move.
+// A clear path to the selected gate completes the puzzle; no extra exit move is added.
 export const BOARD_SIZE = 7;
 export const EXIT_ROWS = [2, 3];
 export const MAX_STATES = 200000;
 
 export function validatePuzzle(pieces, exitRow) {
   const errors = [];
-  if (!EXIT_ROWS.includes(exitRow)) errors.push("Select exactly one exit: J5 or J6.");
+  if (!EXIT_ROWS.includes(exitRow)) errors.push("Select exactly one exit: upper or lower.");
   const occupancy = Array(49).fill(null);
   if (!Array.isArray(pieces)) return ["Puzzle data is not an array."];
   const seen = new Set();
@@ -68,7 +68,7 @@ export function solvePuzzle(pieces, exitRow, maxStates = MAX_STATES, onProgress 
       }
     }
 
-    // The locomotive may exit in one horizontal move when the entire right corridor is clear.
+    // Completion is automatic when the entire right corridor is clear.
     const rx = positions[redIndex] % 7, ry = Math.floor(positions[redIndex] / 7);
     if (ry === exitRow) {
       let clear = true;
@@ -76,7 +76,7 @@ export function solvePuzzle(pieces, exitRow, maxStates = MAX_STATES, onProgress 
         if (occupancy[ry * 7 + x]) { clear = false; break; }
       }
       if (clear) {
-        const solution = [{ id: "red", direction: "exit", cells: 7 - rx - models[redIndex].w + 1 }];
+        const solution = [];
         let at = head;
         while (queue[at].parent !== -1) {
           solution.push(queue[at].move);
@@ -119,3 +119,4 @@ export function solvePuzzle(pieces, exitRow, maxStates = MAX_STATES, onProgress 
   }
   return { status: "unsolvable", visited: visited.size };
 }
+

@@ -1,6 +1,7 @@
 import { validatePuzzle } from "./solver.js";
 import { attemptSlide, attemptExit } from "./play-rules.js";
 import { enterGame } from "../shared/gate.js";
+import { TEMPLATES, TIERS, normalizePuzzleData, nextPieceId, validBlockHue, writeDraft } from "./puzzle-data.js";
 
 // Device-wide appearance preference; independent of puzzle save and current player.
 // Auto follows the OS theme immediately and reacts to subsequent OS changes.
@@ -48,23 +49,9 @@ if (systemTheme) {
 
 const board = document.getElementById("board");
 const $ = id => document.getElementById(id);
-const TEMPLATES = Object.freeze({
-  red:      { type:"red",      w:2, h:1, axis:"h",    color:"red",    label:"RED", name:"Red locomotive" },
-  h2:       { type:"h2",       w:2, h:1, axis:"h",    color:"blue",   label:"H2",  name:"Short train" },
-  v2:       { type:"v2",       w:1, h:2, axis:"v",    color:"green",  label:"V2",  name:"Vertical train" },
-  h3:       { type:"h3",       w:3, h:1, axis:"h",    color:"gold",   label:"H3",  name:"Long train" },
-  v3:       { type:"v3",       w:1, h:3, axis:"v",    color:"purple", label:"V3",  name:"Tall train" },
-  platform: { type:"platform", w:2, h:2, axis:"both", color:"slate", label:"P",   name:"Square platform" }
-});
-// Difficulty is creator-selected metadata; solvability and move counts are independent.
-const TIERS = ["Starter","Beginner","Amateur","Pro","Freak"];
-const LEGACY_TIERS = Object.freeze({
-  Intermediate:"Amateur", Medium:"Amateur", Hard:"Pro", Crazy:"Freak"
-});
-const normalizeTier = tier => LEGACY_TIERS[tier] || tier;
 function migrateTierSlots(key) {
   // Keep old slots untouched for safety; only create the replacement when absent.
-  const oldSlots = {medium:"Amateur",hard:"Pro",crazy:"Freak"};
+  const oldSlots = {medium:"Amateur",intermediate:"Amateur",hard:"Pro",crazy:"Freak"};
   for (const [oldName, newTier] of Object.entries(oldSlots)) {
     const newKey = key + ":" + newTier.toLowerCase();
     if (localStorage.getItem(newKey) !== null) continue;
@@ -72,9 +59,8 @@ function migrateTierSlots(key) {
     if (!old) continue;
     try {
       const data = JSON.parse(old);
-      if (data.format !== "move-red-loco-editor-v1" || !Array.isArray(data.pieces)) continue;
-      const pieces = colorizePieces(repairPieceLabels(clone(data.pieces)));
-      localStorage.setItem(newKey,JSON.stringify({ ...data,difficulty:newTier,pieces }));
+      const draft = preparePuzzleData({...data, difficulty:newTier});
+      localStorage.setItem(newKey, JSON.stringify({...draft, nextId:nextPieceId(draft.pieces), savedAt:data.savedAt}));
     } catch (_) {
       // A malformed legacy slot must not stop login or overwrite another draft.
     }
@@ -97,7 +83,7 @@ function repairPieceLabels(list) {
   for (const p of list) {
     const group = labelGroup(p.type), pool = LABEL_GROUPS[p.type];
     if (!pool) throw Error("Unknown piece type.");
-    if (!pool.includes(p.label) || used[group].has(p.label)) p.label = [...pool].find(x => !used[group].has(x));
+    if (typeof p.label !== "string" || p.label.length !== 1 || !pool.includes(p.label) || used[group].has(p.label)) p.label = [...pool].find(x => !used[group].has(x));
     if (!p.label) throw Error("Too many pieces of type " + group + " (label slots exhausted).");
     used[group].add(p.label);
   }
@@ -106,7 +92,6 @@ function repairPieceLabels(list) {
 // Red is always reserved for X. All other new blocks use a non-red hue.
 // Exclude the 30-degree range centered on 0°/360° (345° through 15°).
 const MIN_BLOCK_HUE = 16, MAX_BLOCK_HUE = 344;
-const validBlockHue = hue => Number.isInteger(hue) && hue >= MIN_BLOCK_HUE && hue <= MAX_BLOCK_HUE;
 function randomBlockHue(list = pieces) {
   const used = list.filter(p => p.type !== "red" && validBlockHue(p.hue)).map(p => p.hue);
   let bestHue = MIN_BLOCK_HUE, bestDistance = -1;
@@ -134,10 +119,10 @@ function paintPiece(el, type, hue) {
   }
 }
 const portraitPhone = () => window.matchMedia("(max-width: 600px) and (orientation: portrait)").matches;
-let pieces = [], nextId = 1, difficulty = "Starter", exitRow = 2; // J5 selected by default
+let pieces = [], nextId = 1, difficulty = "Starter", exitRow = 2; // Upper exit selected by default
 let selectedTemplate = null, selectedHue = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
-let storageKey = null;
+let storageKey = null, playerContext = null;
 let mode = "build", playStart = null, playMoves = 0, playWon = false;
 let playHistory = [], replaying = false, replayGeneration = 0;
 let mobileHold = null;
@@ -203,6 +188,7 @@ function addTemplate(type, x, y, hue = selectedHue) {
   const label = nextPieceLabel(type);
   if (!label) return status("No available labels for this block type. Remove an existing one first.");
   if (type === "red" && ![2,3].includes(y)) return status("The red locomotive can only be placed in board row 3 or 4.");
+  nextId = nextPieceId(pieces);
   const p = { id:type === "red" ? "red" : type + "-" + nextId, type, x, y, w:t.w, h:t.h, axis:t.axis, label };
   if (type !== "red") p.hue = validBlockHue(hue) ? hue : randomBlockHue();
   if (!fits(p)) return status("This module does not fit. Choose an empty area.");
@@ -301,6 +287,16 @@ function recordPlayMove(id, direction, cells, won) {
   });
   playMoves = playHistory.length;
 }
+function finishPlayIfClear() {
+  if (mode !== "play" || replaying || playWon || attemptExit(pieces, exitRow).status !== "won") return false;
+  playWon = true;
+  selectedId = null;
+  if (playHistory.length) playHistory[playHistory.length - 1].won = true;
+  const message = "Solved in " + playMoves + " moves!";
+  status("Congratulations! " + message);
+  showNotice("Congratulations!", message);
+  return true;
+}
 function slidePlayable(id, dx, dy) {
   if (mode !== "play" || playWon || replaying) return;
   const piece = byId(id);
@@ -312,13 +308,10 @@ function slidePlayable(id, dx, dy) {
     return;
   }
   if (result.status === "won") {
-    playWon = true;
-    selectedId = null;
     recordPlayMove(id, "exit", 8 - oldX - piece.w, true);
+    finishPlayIfClear();
     render();
     renderMoveLog(-1, true);
-    status("The red locomotive escaped through J" + (exitRow + 3) +
-      " in " + playMoves + " moves. Replay to review your moves.");
     return;
   }
   piece.x = result.x;
@@ -327,9 +320,10 @@ function slidePlayable(id, dx, dy) {
     result.y > oldY ? "down" : "up";
   const cells = Math.abs(result.x - oldX) + Math.abs(result.y - oldY);
   recordPlayMove(id, direction, cells, false);
+  const solved = finishPlayIfClear();
   render();
   renderMoveLog(-1, true);
-  status("Play preview: " + playMoves + " moves. Use the active exit when the path is clear.");
+  if (!solved) status("Play preview: " + playMoves + " moves. Clear the path to the active exit.");
 }
 function exitPlayable() {
   if (mode !== "play" || playWon || replaying) return;
@@ -340,6 +334,7 @@ function exitPlayable() {
 async function replayMoves() {
   if (mode !== "play" || replaying || !playStart || !playHistory.length) return;
   if (pointerDrag) finishDrag();
+  $("noticeCard").close();
   const generation = ++replayGeneration;
   replaying = true;
   selectedId = null;
@@ -372,6 +367,7 @@ function setMode(next) {
   replaying = false;
   if (pointerDrag) finishDrag();
   closeSaveMenu();
+  $("noticeCard").close();
   if (next === "play") {
     const errors = validatePuzzle(pieces, exitRow);
     if (errors.length) {
@@ -387,8 +383,9 @@ function setMode(next) {
     selectedTemplate = null;
     mode = "play";
     invalidateTest();
+    const solved = finishPlayIfClear();
     render();
-    status("Play: each legal slide counts as one move. Use Replay to review recorded moves.");
+    if (!solved) status("Play: clear the red locomotive's path to the active exit. Each slide counts as one move.");
   } else {
     mode = "build";
     if (playStart) applySnapshot(playStart);
@@ -454,7 +451,7 @@ function render() {
     const active = Number(el.dataset.exitRow) === exitRow;
     el.setAttribute("aria-pressed", String(active));
     el.querySelector(".arrow").textContent = active ? "→" : "×";
-    el.title = active ? "Active exit J" + (exitRow + 3) : "Select exit J" + (Number(el.dataset.exitRow) + 3);
+    el.title = active ? "Active exit" : "Select " + (Number(el.dataset.exitRow) === 2 ? "upper" : "lower") + " exit";
   });
   $("reset").disabled = mode === "play";
   $("undo").disabled = mode === "play" || !undoStack.length;
@@ -470,7 +467,7 @@ function render() {
     el.disabled = mode === "play" && Number(el.dataset.exitRow) !== exitRow;
     el.setAttribute("aria-label", mode === "play" ?
       (Number(el.dataset.exitRow) === exitRow ? "Try exiting through this gate" : "Closed exit") :
-      "Select exit J" + (Number(el.dataset.exitRow) + 3));
+      "Select " + (Number(el.dataset.exitRow) === 2 ? "upper" : "lower") + " exit");
   });
   updateFloatingTemplate();
   const p = byId(selectedId);
@@ -769,7 +766,7 @@ document.querySelectorAll(".exit-gate").forEach(btn=>btn.addEventListener("click
   recordEdit();
   if (red) red.y = row;
   exitRow = row;
-  modified("Active exit is now J" + (row + 3) + (red ? "; X moved into alignment" : ""));
+  modified("Selected the " + (row === 2 ? "upper" : "lower") + " exit" + (red ? "; X moved into alignment" : ""));
 }));
 $("reset").addEventListener("click",()=>{
   if (mode !== "build" || !pieces.length) return;
@@ -783,6 +780,7 @@ $("rotate").addEventListener("click",rotateSelected);
 $("remove").addEventListener("click",removeSelected);
 $("clearSelection").addEventListener("click",()=>{ if(mode!=="build")return; selectedId=null; selectedTemplate=null; render();status("Selection cleared."); });
 document.addEventListener("keydown", e=>{
+  if ($("noticeCard").open) return;
   const tag = e.target?.tagName;
   if (["INPUT","TEXTAREA","SELECT"].includes(tag)) return;
   if (e.key === "Escape" && !$("saveMenu").hidden) { closeSaveMenu(); e.preventDefault(); return; }
@@ -871,15 +869,33 @@ $("test").addEventListener("click",()=>{
   worker.postMessage({requestId:id,pieces:clone(pieces),exitRow});
 });
 
+// Validation finishes before editor state, history, or saved slots change.
+function preparePuzzleData(data) {
+  const clean = normalizePuzzleData(data);
+  clean.pieces = colorizePieces(repairPieceLabels(clean.pieces));
+  return clean;
+}
 function documentData() {
-  return { format:"move-red-loco-editor-v1", difficulty, exitRow, pieces:clone(pieces) };
+  return preparePuzzleData({ format:"move-red-loco-editor-v1", difficulty, exitRow, pieces });
+}
+function showNotice(title, message) {
+  $("noticeTitle").textContent = title;
+  $("noticeMessage").textContent = message;
+  if (!$("noticeCard").open) $("noticeCard").showModal();
+}
+$("closeNotice").addEventListener("click", () => $("noticeCard").close());
+function requireCreator() {
+  if (playerContext?.player.code === "SL") return true;
+  closeSaveMenu();
+  showNotice("Save puzzle layout", "Only SL can save a puzzle layout.");
+  return false;
 }
 function closeSaveMenu() {
   $("saveMenu").hidden = true;
   $("save").setAttribute("aria-expanded","false");
 }
 $("save").addEventListener("click",()=>{
-  if (mode !== "build") return;
+  if (mode !== "build" || !requireCreator()) return;
   const willOpen = $("saveMenu").hidden;
   $("saveMenu").hidden = !willOpen;
   $("save").setAttribute("aria-expanded",String(willOpen));
@@ -888,14 +904,12 @@ document.addEventListener("pointerdown", event=>{
   if (!event.target.closest("#saveBox")) closeSaveMenu();
 });
 document.querySelectorAll("[data-save-tier]").forEach(btn=>btn.addEventListener("click",()=>{
-  if (mode !== "build" || !storageKey) return;
+  if (mode !== "build" || !requireCreator() || !storageKey) return;
   const tier = btn.dataset.saveTier;
   if (!TIERS.includes(tier)) return;
   try {
-    const draft = { ...documentData(), difficulty:tier, nextId, savedAt:new Date().toISOString() };
-    // Each tier has its own saved slot, as well as the latest working draft.
-    localStorage.setItem(storageKey + ":" + tier.toLowerCase(),JSON.stringify(draft));
-    localStorage.setItem(storageKey,JSON.stringify(draft));
+    const draft = { ...documentData(), difficulty:tier, nextId:nextPieceId(pieces), savedAt:new Date().toISOString() };
+    writeDraft(localStorage, storageKey, draft);
     if (difficulty !== tier) { recordEdit(); difficulty = tier; }
     closeSaveMenu(); render();
     status("Saved as " + tier + " on this device. Export JSON for a portable copy.");
@@ -904,15 +918,17 @@ document.querySelectorAll("[data-save-tier]").forEach(btn=>btn.addEventListener(
   }
 }));
 $("export").addEventListener("click",()=>{
-  if (mode !== "build") return;
-  const data = JSON.stringify(documentData(),null,2)+"\n";
-  const blob = new Blob([data],{type:"application/json"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href=url; a.download="move-red-loco-" + difficulty.toLowerCase() + ".json";
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-  status("Exported puzzle JSON. Saved files contain no account data.");
+  if (mode !== "build" || !requireCreator()) return;
+  try {
+    const data = JSON.stringify(documentData(),null,2)+"\n";
+    const blob = new Blob([data],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href=url; a.download="move-red-loco-" + difficulty.toLowerCase() + ".json";
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    status("Exported puzzle JSON. Saved files contain no account data.");
+  } catch(error) { status("Could not export JSON: " + error.message); }
 });
 $("import").addEventListener("click",()=>{if(mode==="build")$("importFile").click();});
 $("importFile").addEventListener("change",async event=>{
@@ -922,70 +938,40 @@ $("importFile").addEventListener("change",async event=>{
   if (!file) return;
   try {
     if (file.size > 100000) throw Error("File is too large.");
-    const data=JSON.parse(await file.text());
-    if (data.format!=="move-red-loco-editor-v1" || !TIERS.includes(normalizeTier(data.difficulty)) ||
-        !Array.isArray(data.pieces) || data.pieces.length>35) throw Error("Not a supported puzzle file.");
-    if (data.exitRow !== undefined && ![2,3].includes(data.exitRow)) throw Error("Exit must be J5 or J6.");
-    const ids=new Set(), imported=[];
-    for (const p of data.pieces) {
-      const t=TEMPLATES[p.type];
-      if (!t || typeof p.id!=="string" || p.id.length>45 || ids.has(p.id) ||
-          (p.type==="red" ? p.id!=="red" : !/^(h2|v2|h3|v3|platform)-[0-9]+$/.test(p.id)) ||
-          ![p.x,p.y,p.w,p.h].every(Number.isInteger) || p.w<1 || p.h<1 ||
-          ((p.w===t.w && p.h===t.h) ? p.axis!==t.axis :
-           (p.type==="red" || p.type==="platform" || p.w!==t.h || p.h!==t.w || p.axis!==(t.axis==="h"?"v":"h")))) {
-        throw Error("Invalid module in the file.");
-      }
-      ids.add(p.id);
-      if (p.hue !== undefined && p.type !== "red" && !validBlockHue(p.hue)) {
-        throw Error("Invalid block hue. Allowed hue range is 16–344°.");
-      }
-      imported.push({id:p.id,type:p.type,x:p.x,y:p.y,w:p.w,h:p.h,axis:p.axis,
-        label:typeof p.label === "string" ? p.label : undefined,
-        ...(p.type !== "red" && validBlockHue(p.hue) ? {hue:p.hue} : {})});
-    }
-    // A draft may lack its red locomotive, but it must still fit and have no overlaps.
-    for (let i=0;i<imported.length;i++) {
-      const p=imported[i];
-      if ((p.id === "red" && ![2,3].includes(p.y)) ||
-          p.x<0||p.y<0||p.x+p.w>7||p.y+p.h>7 ||
-          imported.slice(0,i).some(q=>p.x<q.x+q.w&&p.x+p.w>q.x&&p.y<q.y+q.h&&p.y+p.h>q.y)) {
-        throw Error("The file contains overlapping or off-board modules.");
-      }
-    }
+    const draft = preparePuzzleData(JSON.parse(await file.text()));
+    // File reading is asynchronous. A mode change must not replace a running preview.
+    if (mode !== "build") return;
     recordEdit();
-    repairPieceLabels(imported);
-    pieces=colorizePieces(imported); difficulty=normalizeTier(data.difficulty);
-    // A red locomotive always determines which exit is open.
-    exitRow = imported.find(p => p.id==="red")?.y ?? data.exitRow ?? 2;
-    nextId=Math.max(1,...pieces.map(p=>Number(p.id.match(/[0-9]+$/)?.[0]||0)+1));
-    selectedId=null;selectedTemplate=null;
+    pieces=draft.pieces; difficulty=draft.difficulty; exitRow=draft.exitRow;
+    nextId=nextPieceId(pieces);
+    selectedId=null;selectedTemplate=null;selectedHue=null;
     modified("Imported " + pieces.length + " modules");
   } catch(error) { status("Import rejected: " + error.message); }
 });
 
 const ctx = await enterGame({ bar:$("playerBar") });
 if (ctx) {
+  playerContext = ctx;
   storageKey = "mrl-editor-v1:" + ctx.player.uid;
   try {
-    migrateTierSlots(storageKey);
     const saved = JSON.parse(localStorage.getItem(storageKey));
-    if (saved?.format==="move-red-loco-editor-v1" && Array.isArray(saved.pieces) && TIERS.includes(normalizeTier(saved.difficulty))) {
-      // Use the same constrained import validation for saved drafts at the next explicit import.
-      // Local drafts contain only this editor's own schema.
-      // Persist the color migration so existing puzzles do not change hues on reload.
-      const needsColorMigration = saved.pieces.some(p => p.type !== "red" && !validBlockHue(p.hue));
-      const updatedDifficulty = normalizeTier(saved.difficulty);
-      pieces=colorizePieces(repairPieceLabels(saved.pieces)); difficulty=updatedDifficulty;
-      if (needsColorMigration || updatedDifficulty !== saved.difficulty) {
-        localStorage.setItem(storageKey, JSON.stringify({ ...saved,difficulty:updatedDifficulty,pieces }));
-      }
-      // Legacy drafts always align the gate to the locomotive when present.
-      exitRow = pieces.find(p=>p.id==="red" && [2,3].includes(p.y))?.y ??
-        ([2,3].includes(saved.exitRow) ? saved.exitRow : 2);
-      nextId=saved.nextId || 1;
+    if (saved !== null) {
+      const draft = preparePuzzleData(saved);
+      pieces=draft.pieces; difficulty=draft.difficulty; exitRow=draft.exitRow;
+      nextId=nextPieceId(pieces);
       status("Restored locally saved draft for " + ctx.player.code + ".");
+      // Only SL may persist migrations. Other players can still read their old drafts.
+      if (ctx.player.code === "SL" &&
+          (saved.difficulty !== difficulty || saved.exitRow !== exitRow ||
+           JSON.stringify(saved.pieces) !== JSON.stringify(pieces))) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify({...draft, nextId, savedAt:saved.savedAt}));
+        } catch (_) { status("Draft restored. The device could not save its updated format."); }
+      }
     }
-  } catch(error) { status("Could not restore saved draft."); }
+  } catch(error) { status("Could not restore saved draft. The saved data was kept. Import a valid JSON file."); }
+  if (ctx.player.code === "SL") {
+    try { migrateTierSlots(storageKey); } catch (_) { /* Keep valid drafts usable if device storage is unavailable. */ }
+  }
   render();
 }
