@@ -75,6 +75,47 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Shared puzzle library. Players can read; only the server's SL account can save.
+    // These checks protect metadata and the outer shape. The application validates
+    // each block, board bounds, and overlap before saving and after reading.
+    function puzzleIdOk(id) {
+      return id.matches('[a-z0-9][a-z0-9-]{0,63}');
+    }
+    function puzzleShapeOk(d) {
+      return d.keys().hasOnly(['format', 'title', 'difficulty', 'exitRow', 'pieces',
+          'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && d.keys().hasAll(['format', 'title', 'difficulty', 'exitRow', 'pieces',
+          'revision', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
+        && d.format == 'move-red-loco-puzzle-v1'
+        && d.title is string && d.title.size() >= 1 && d.title.size() <= 80
+        && d.difficulty in ['Starter', 'Beginner', 'Amateur', 'Pro', 'Freak']
+        && d.exitRow is int && d.exitRow in [2, 3]
+        && d.pieces is list && d.pieces.size() <= 35
+        && d.revision is int && d.revision >= 1 && d.revision <= 9007199254740990
+        && d.createdAt is timestamp && d.updatedAt is timestamp
+        && d.createdBy is string && d.updatedBy is string;
+    }
+    match /puzzleLibrary/{puzzleId} {
+      allow read: if isFamily();
+      allow create: if isFamily() && playerCode() == 'SL'
+        && puzzleIdOk(puzzleId)
+        && puzzleShapeOk(request.resource.data)
+        && request.resource.data.revision == 1
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isFamily() && playerCode() == 'SL'
+        && puzzleIdOk(puzzleId)
+        && puzzleShapeOk(request.resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
     // Everything else stays locked.
   }
 }

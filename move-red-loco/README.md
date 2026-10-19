@@ -7,6 +7,29 @@
 
 This is an **original puzzle editor**, inspired by the mechanical idea of Railroad RushHour. Do not copy commercial challenge arrangements or artwork into published levels.
 
+## Firestore library — prepared for activation
+
+Sean chose Firestore for puzzle storage, with JSON archive download and restore.
+This supersedes publishing puzzle JSON files through repository commits.
+See the [Firebase console instructions](../firebase/PUZZLE_SETUP.md).
+
+The cloud controls remain staged off until the prepared security rules are published.
+The existing device Save remains available during setup.
+After activation, Save also writes a named puzzle to Firestore when online.
+Each puzzle has a stable ID and a revision.
+Open library loads existing puzzles; New puzzle creates a separate layout.
+Only SL can Save, Download archive, or Restore archive through the interface.
+Firestore rules enforce SL-only writes and family reads.
+
+Archives contain up to 200 puzzles in one JSON file, with a 2 MB limit.
+The archive excludes account IDs and game statistics.
+Download reads fresh server data.
+Restore keeps matching IDs by default; replacement requires the explicit checkbox.
+A single transaction checks revisions and prevents partial restoration.
+New restores receive current server metadata; updates retain their original creation metadata.
+An offline Save keeps a device draft and requires another Save when online.
+The library caches a validated copy for offline reading after an online load.
+
 ## Save and JSON integrity — 2026-10-18
 
 Only **SL** can use Save or Export JSON. Other players see “Only SL can save a puzzle layout.”
@@ -14,9 +37,8 @@ All players can build, import a layout, and use Play preview.
 Existing drafts remain readable for other players, without automatic migration writes.
 This is a device interface restriction. GitHub permissions control repository publication.
 
-Save remains device-local. Export JSON downloads a file for review and a GitHub commit.
-Reviewed layouts belong in [puzzles/](puzzles/README.md).
-The browser does not commit files to GitHub.
+During setup, Save remains device-local. Export JSON downloads a portable single layout.
+Firestore replaces repository publication after activation. See [storage and archives](puzzles/README.md).
 
 Save, Export, Import, and restore use the same layout checks.
 Invalid imported or saved data cannot partially replace the current puzzle.
@@ -112,7 +134,7 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v13`.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v14`.
 - The root game menu links to the workshop. The curated player-facing game is future work.
 - Firestore security rules are unchanged. No levels or results are uploaded.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
@@ -128,3 +150,7 @@ Run `node move-red-loco/tests/puzzle-data.test.mjs` from the repository root.
 Run `python move-red-loco/tests/browser.py` for Chromium checks with Playwright installed.
 The browser checks simulate family identities. They do not verify real Firebase sign-in.
 Physical touch devices and real offline checkout still need acceptance testing.
+
+Run `node move-red-loco/tests/library.test.mjs` for archive and transaction checks.
+Run `python move-red-loco/tests/browser_library.py` for cloud UI checks with a simulated Firebase SDK.
+Cloud controls remain off in the deployed configuration until rule publication is confirmed.

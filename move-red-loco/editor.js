@@ -2,6 +2,8 @@ import { validatePuzzle } from "./solver.js";
 import { attemptSlide, attemptExit } from "./play-rules.js";
 import { enterGame } from "../shared/gate.js";
 import { TEMPLATES, TIERS, normalizePuzzleData, nextPieceId, validBlockHue, writeDraft } from "./puzzle-data.js";
+import { LIBRARY_ENABLED } from "./library-config.js";
+import { makeArchive, normalizeArchive, normalizeLibraryPuzzle, planRestore, validPuzzleId, MAX_ARCHIVE_BYTES } from "./library-data.js";
 
 // Device-wide appearance preference; independent of puzzle save and current player.
 // Auto follows the OS theme immediately and reacts to subsequent OS changes.
@@ -123,6 +125,8 @@ let pieces = [], nextId = 1, difficulty = "Starter", exitRow = 2; // Upper exit 
 let selectedTemplate = null, selectedHue = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
 let storageKey = null, playerContext = null;
+let libraryId = null, libraryRevision = 0, libraryBusy = false, libraryEntries = [], restoreArchive = null;
+const knownLibraryRevisions = new Map();
 let mode = "build", playStart = null, playMoves = 0, playWon = false;
 let playHistory = [], replaying = false, replayGeneration = 0;
 let mobileHold = null;
@@ -144,9 +148,12 @@ function fits(testPiece, exceptId = null) {
     testPiece.x < p.x + p.w && testPiece.x + testPiece.w > p.x &&
     testPiece.y < p.y + p.h && testPiece.y + testPiece.h > p.y);
 }
-function snapshot() { return { pieces:clone(pieces), nextId, difficulty, exitRow }; }
+function snapshot() { return { pieces:clone(pieces), nextId, difficulty, exitRow,
+  libraryId,libraryRevision,title:$("puzzleTitle").value }; }
 function applySnapshot(s) {
   pieces = clone(s.pieces); nextId = s.nextId; difficulty = s.difficulty; exitRow = s.exitRow;
+  libraryId=s.libraryId??null; libraryRevision=knownLibraryRevisions.get(libraryId)??s.libraryRevision??0;
+  $("puzzleTitle").value=s.title||"Untitled puzzle";
   selectedId = null; selectedTemplate = null; selectedHue = null; invalidateTest(); render();
 }
 function recordEdit() {
@@ -164,7 +171,7 @@ function invalidateTest() {
   clearHover();
 }
 function selectTemplate(type, hue = null) {
-  if (mode !== "build") return;
+  if (mode !== "build" || libraryBusy) return;
   $("mobilePicker").hidden = true;
   selectedTemplate = selectedTemplate === type ? null : type;
   selectedHue = selectedTemplate === null || type === "red" ? null :
@@ -181,7 +188,7 @@ function selectPiece(id) {
   status("Selected " + byId(id)?.id + ". Drag to reposition, use arrow keys, or remove.");
 }
 function addTemplate(type, x, y, hue = selectedHue) {
-  if (mode !== "build") return;
+  if (mode !== "build" || libraryBusy) return;
   const t = TEMPLATES[type];
   if (!t) return;
   if (type === "red" && byId("red")) return status("Only one red locomotive is allowed.");
@@ -202,7 +209,7 @@ function addTemplate(type, x, y, hue = selectedHue) {
   modified("Added " + t.name);
 }
 function movePiece(id, x, y) {
-  if (mode !== "build") return;
+  if (mode !== "build" || libraryBusy) return;
   const p = byId(id);
   if (!p || (p.x === x && p.y === y)) return;
   if (p.type === "red" && ![2,3].includes(y)) return status("Red locomotive must stay on exit row 3 or 4.");
@@ -213,7 +220,7 @@ function movePiece(id, x, y) {
   modified("Moved " + (p.label || p.id));
 }
 function rotateSelected() {
-  if (mode !== "build") return;
+  if (mode !== "build" || libraryBusy) return;
   const p = byId(selectedId);
   if (!p) return;
   if (p.type === "red" || p.type === "platform") return status("This module has no alternate orientation.");
@@ -224,7 +231,7 @@ function rotateSelected() {
   modified("Rotated " + p.id);
 }
 function removeSelected() {
-  if (mode !== "build") return;
+  if (mode !== "build" || libraryBusy) return;
   if (!selectedId) return;
   const id = selectedId;
   recordEdit();
@@ -233,14 +240,14 @@ function removeSelected() {
   modified("Removed " + id);
 }
 function undo() {
-  if (mode !== "build") return;
+  if (mode !== "build" || libraryBusy) return;
   if (!undoStack.length) return;
   redoStack.push(snapshot());
   applySnapshot(undoStack.pop());
   status("Undo completed.");
 }
 function redo() {
-  if (mode !== "build") return;
+  if (mode !== "build" || libraryBusy) return;
   if (!redoStack.length) return;
   undoStack.push(snapshot());
   applySnapshot(redoStack.pop());
@@ -360,7 +367,7 @@ async function replayMoves() {
     " moves shown. The final play position is restored.");
 }
 function setMode(next) {
-  if (next === mode) return;
+  if (next === mode || libraryBusy) return;
   cancelMobileHold();
   closeMobilePicker();
   ++replayGeneration;
@@ -453,18 +460,24 @@ function render() {
     el.querySelector(".arrow").textContent = active ? "→" : "×";
     el.title = active ? "Active exit" : "Select " + (Number(el.dataset.exitRow) === 2 ? "upper" : "lower") + " exit";
   });
-  $("reset").disabled = mode === "play";
-  $("undo").disabled = mode === "play" || !undoStack.length;
-  $("redo").disabled = mode === "play" || !redoStack.length;
-  $("save").disabled = mode === "play";
+  $("reset").disabled = libraryBusy || mode === "play";
+  $("undo").disabled = libraryBusy || mode === "play" || !undoStack.length;
+  $("redo").disabled = libraryBusy || mode === "play" || !redoStack.length;
+  $("save").disabled = libraryBusy || mode === "play";
   $("test").disabled = mode === "build" && !!worker;
   document.querySelectorAll("#saveMenu button,.extras button,.details button").forEach(el => {
-    el.disabled = mode === "play" || (el.id === "remove" && !selectedId) ||
+    el.disabled = libraryBusy || mode === "play" || (el.id === "remove" && !selectedId) ||
       (el.id === "rotate" && (!selectedId || ["red","platform"].includes(byId(selectedId)?.type))) ||
       (el.id === "clearSelection" && !selectedId && !selectedTemplate);
   });
+  $("libraryTools").hidden = !LIBRARY_ENABLED;
+  $("puzzleNameLabel").hidden = !LIBRARY_ENABLED;
+  $("librarySetup").hidden = LIBRARY_ENABLED;
+  $("puzzleTitle").disabled = libraryBusy || mode === "play";
+  $("buildMode").disabled = libraryBusy; $("playMode").disabled = libraryBusy;
+  document.querySelectorAll("#libraryTools button").forEach(el=>el.disabled=libraryBusy||mode!=="build");
   document.querySelectorAll(".exit-gate").forEach(el => {
-    el.disabled = mode === "play" && Number(el.dataset.exitRow) !== exitRow;
+    el.disabled = libraryBusy || (mode === "play" && Number(el.dataset.exitRow) !== exitRow);
     el.setAttribute("aria-label", mode === "play" ?
       (Number(el.dataset.exitRow) === exitRow ? "Try exiting through this gate" : "Closed exit") :
       "Select " + (Number(el.dataset.exitRow) === 2 ? "upper" : "lower") + " exit");
@@ -602,7 +615,7 @@ function templateAnchor(clientX, clientY, type) {
     y:Math.round((clientY-r.top)/size - t.h/2) };
 }
 function beginDrag(event, data) {
-  if (event.button !== 0 || pointerDrag || (mode === "play" && data.kind !== "play")) return;
+  if (libraryBusy || event.button !== 0 || pointerDrag || (mode === "play" && data.kind !== "play")) return;
   if (data.kind === "palette" && data.type !== "red" && !validBlockHue(data.hue)) {
     data.hue = data.mobileFloating && validBlockHue(selectedHue) ? selectedHue : randomBlockHue();
   }
@@ -726,7 +739,7 @@ document.querySelectorAll(".palette-card").forEach(el=>{
   });
 });
 board.addEventListener("pointerdown", event=>{
-  if (event.button !== 0) return;
+  if (event.button !== 0 || libraryBusy) return;
   const pieceEl = event.target.closest(".piece");
   if (pieceEl) {
     const p = byId(pieceEl.dataset.pieceId);
@@ -752,6 +765,7 @@ board.addEventListener("pointerdown", event=>{
   }
 });
 document.querySelectorAll(".exit-gate").forEach(btn=>btn.addEventListener("click",()=>{
+  if (libraryBusy) return;
   const row = Number(btn.dataset.exitRow);
   if (mode === "play") {
     if (row === exitRow) exitPlayable();
@@ -769,9 +783,10 @@ document.querySelectorAll(".exit-gate").forEach(btn=>btn.addEventListener("click
   modified("Selected the " + (row === 2 ? "upper" : "lower") + " exit" + (red ? "; X moved into alignment" : ""));
 }));
 $("reset").addEventListener("click",()=>{
-  if (mode !== "build" || !pieces.length) return;
+  if (mode !== "build" || libraryBusy || !pieces.length) return;
   if (!confirm("Remove every module from this puzzle? You can still Undo.")) return;
   recordEdit(); pieces=[]; selectedId=null; selectedTemplate=null;
+  libraryId=null; libraryRevision=0; $("puzzleTitle").value="Untitled puzzle";
   modified("Cleared the board");
 });
 $("undo").addEventListener("click",undo);
@@ -780,7 +795,7 @@ $("rotate").addEventListener("click",rotateSelected);
 $("remove").addEventListener("click",removeSelected);
 $("clearSelection").addEventListener("click",()=>{ if(mode!=="build")return; selectedId=null; selectedTemplate=null; render();status("Selection cleared."); });
 document.addEventListener("keydown", e=>{
-  if ($("noticeCard").open) return;
+  if ($("noticeCard").open || $("libraryCard").open || $("restoreCard").open || libraryBusy) return;
   const tag = e.target?.tagName;
   if (["INPUT","TEXTAREA","SELECT"].includes(tag)) return;
   if (e.key === "Escape" && !$("saveMenu").hidden) { closeSaveMenu(); e.preventDefault(); return; }
@@ -903,16 +918,31 @@ $("save").addEventListener("click",()=>{
 document.addEventListener("pointerdown", event=>{
   if (!event.target.closest("#saveBox")) closeSaveMenu();
 });
-document.querySelectorAll("[data-save-tier]").forEach(btn=>btn.addEventListener("click",()=>{
-  if (mode !== "build" || !requireCreator() || !storageKey) return;
+document.querySelectorAll("[data-save-tier]").forEach(btn=>btn.addEventListener("click",async()=>{
+  if (mode !== "build" || libraryBusy || !requireCreator() || !storageKey) return;
   const tier = btn.dataset.saveTier;
   if (!TIERS.includes(tier)) return;
   try {
-    const draft = { ...documentData(), difficulty:tier, nextId:nextPieceId(pieces), savedAt:new Date().toISOString() };
+    const pendingId = LIBRARY_ENABLED ? (libraryId || crypto.randomUUID()) : libraryId;
+    const draft = { ...documentData(), difficulty:tier, nextId:nextPieceId(pieces), savedAt:new Date().toISOString(),
+      title:$("puzzleTitle").value,libraryId:pendingId,libraryRevision };
     writeDraft(localStorage, storageKey, draft);
+    libraryId=pendingId;
     if (difficulty !== tier) { recordEdit(); difficulty = tier; }
     closeSaveMenu(); render();
     status("Saved as " + tier + " on this device. Export JSON for a portable copy.");
+    if (LIBRARY_ENABLED) {
+      if (!online()) { status("Saved on this device. Connect to the internet and Save again to save in the family library."); return; }
+      await libraryTask(async()=>{
+        const store=await cloudStore();
+        const saved=await store.savePuzzle({id:libraryId,title:draft.title,layout:draft,expectedRevision:libraryRevision});
+        libraryRevision=saved.revision;
+        knownLibraryRevisions.set(libraryId,libraryRevision);
+        try { writeDraft(localStorage,storageKey,{...draft,libraryRevision}); }
+        catch (_) { status("Saved in the family library. The device copy could not be updated."); return; }
+        status("Saved in the family library: " + draft.title + ".");
+      });
+    }
   } catch(error) {
     closeSaveMenu(); status("Could not save locally: " + error.message);
   }
@@ -932,7 +962,7 @@ $("export").addEventListener("click",()=>{
 });
 $("import").addEventListener("click",()=>{if(mode==="build")$("importFile").click();});
 $("importFile").addEventListener("change",async event=>{
-  if (mode !== "build") return;
+  if (mode !== "build" || libraryBusy) return;
   const file=event.target.files?.[0];
   event.target.value="";
   if (!file) return;
@@ -940,13 +970,135 @@ $("importFile").addEventListener("change",async event=>{
     if (file.size > 100000) throw Error("File is too large.");
     const draft = preparePuzzleData(JSON.parse(await file.text()));
     // File reading is asynchronous. A mode change must not replace a running preview.
-    if (mode !== "build") return;
+    if (mode !== "build" || libraryBusy) return;
     recordEdit();
     pieces=draft.pieces; difficulty=draft.difficulty; exitRow=draft.exitRow;
+    libraryId=null; libraryRevision=0; $("puzzleTitle").value="Imported puzzle";
     nextId=nextPieceId(pieces);
     selectedId=null;selectedTemplate=null;selectedHue=null;
     modified("Imported " + pieces.length + " modules");
   } catch(error) { status("Import rejected: " + error.message); }
+});
+
+function online() {
+  return navigator.onLine !== false && (playerContext?.online ? playerContext.online() : playerContext?.mode !== "checkout");
+}
+async function cloudStore() {
+  if (!LIBRARY_ENABLED) throw Error("The cloud library is not available yet.");
+  if (!online()) throw Error("Connect to the internet for this action.");
+  return import("./library-firestore.js");
+}
+async function libraryTask(work) {
+  if (libraryBusy) return;
+  cancelMobileHold(); closeMobilePicker(); closeSaveMenu();
+  if (pointerDrag) finishDrag();
+  libraryBusy=true; render();
+  try { return await work(); }
+  catch(error) {
+    const message=error.code==="permission-denied" ?
+      "Firebase refused this action. Sign in as SL for changes. Cloud setup may still be pending." : error.message;
+    status("Library action did not finish: " + message);
+    showNotice("Puzzle library",message);
+  } finally { libraryBusy=false; render(); }
+}
+function cacheLibrary(entries) {
+  try {localStorage.setItem("mrl-library-v1:"+playerContext.player.uid,JSON.stringify(entries));} catch (_) {}
+}
+async function readLibrary() {
+  if (online()) {
+    const entries=await (await cloudStore()).listPuzzles();
+    cacheLibrary(entries);
+    return entries;
+  }
+  const data=JSON.parse(localStorage.getItem("mrl-library-v1:"+playerContext.player.uid)||"[]");
+  if (!Array.isArray(data)) throw Error("The device library copy is invalid. Connect to refresh it.");
+  return data.map(normalizeLibraryPuzzle);
+}
+function downloadJSON(data,name) {
+  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)+"\n"],{type:"application/json"}));
+  const anchor=document.createElement("a");anchor.href=url;anchor.download=name;anchor.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$("openLibrary").addEventListener("click",()=>{
+  if (!LIBRARY_ENABLED || mode!=="build") return;
+  void libraryTask(async()=>{
+    libraryEntries=await readLibrary();
+    const select=$("librarySelect");select.replaceChildren();
+    for (const puzzle of libraryEntries) {
+      const option=document.createElement("option");option.value=puzzle.id;
+      option.textContent=puzzle.title+" · "+puzzle.difficulty;select.appendChild(option);
+    }
+    if (libraryEntries.length) select.selectedIndex=0;
+    $("loadPuzzle").disabled=!libraryEntries.length;
+    $("libraryMessage").textContent=libraryEntries.length ?
+      (online()?"Choose a saved puzzle.":"Offline: choose a puzzle from this device's saved copy.") :
+      (online()?"No puzzles have been saved yet.":"No library copy is available on this device. Connect to load it.");
+    $("libraryCard").showModal();
+  });
+});
+$("closeLibrary").addEventListener("click",()=>$("libraryCard").close());
+$("loadPuzzle").addEventListener("click",()=>{
+  if (libraryBusy || mode!=="build") return;
+  const puzzle=libraryEntries.find(p=>p.id===$("librarySelect").value);
+  if (!puzzle) return;
+  if (pieces.length && !confirm("Replace the current layout with this saved puzzle?")) return;
+  const draft=preparePuzzleData({...puzzle,format:"move-red-loco-editor-v1"});
+  recordEdit();pieces=draft.pieces;difficulty=draft.difficulty;exitRow=draft.exitRow;
+  nextId=nextPieceId(pieces);libraryId=puzzle.id;libraryRevision=puzzle.revision;
+  knownLibraryRevisions.set(libraryId,libraryRevision);
+  $("puzzleTitle").value=puzzle.title;selectedId=null;selectedTemplate=null;selectedHue=null;
+  $("libraryCard").close();invalidateTest();render();status("Opened "+puzzle.title+" from the family library.");
+});
+$("newPuzzle").addEventListener("click",()=>{
+  if (mode!=="build" || libraryBusy) return;
+  if (pieces.length && !confirm("Start a new puzzle? Unsaved changes to this layout will be replaced.")) return;
+  recordEdit();pieces=[];nextId=1;exitRow=2;difficulty="Starter";
+  libraryId=null;libraryRevision=0;$("puzzleTitle").value="Untitled puzzle";
+  selectedId=null;selectedTemplate=null;selectedHue=null;modified("Started a new puzzle");
+});
+$("downloadArchive").addEventListener("click",()=>{
+  if (mode!=="build" || !requireCreator()) return;
+  void libraryTask(async()=>{
+    // The archive always comes from a fresh server query, never from the device cache.
+    const records=await (await cloudStore()).listPuzzles();
+    const archive=makeArchive(records);
+    downloadJSON(archive,"move-red-loco-archive-"+archive.exportedAt.slice(0,10)+".json");
+    cacheLibrary(records);status("Downloaded an archive of "+records.length+" puzzles from Firestore.");
+  });
+});
+$("restoreArchive").addEventListener("click",()=>{
+  if (LIBRARY_ENABLED && mode==="build" && !libraryBusy && requireCreator()) $("archiveFile").click();
+});
+function restorePlan() { return planRestore(restoreArchive,libraryEntries,$("overwriteExisting").checked); }
+function renderRestorePlan() {
+  const plan=restorePlan();
+  const added=plan.entries.filter(entry=>entry.expectedRevision===0).length;
+  $("restoreSummary").textContent=added+" new puzzles. "+(plan.entries.length-added)+
+    " existing puzzles to replace. "+plan.skipped.length+" existing puzzles to keep.";
+  $("confirmRestore").disabled=plan.entries.length===0;
+}
+$("archiveFile").addEventListener("change",async event=>{
+  const file=event.target.files?.[0];event.target.value="";
+  if (!file || mode!=="build" || libraryBusy || !requireCreator()) return;
+  await libraryTask(async()=>{
+    if (file.size>MAX_ARCHIVE_BYTES) throw Error("Archive exceeds 2 MB.");
+    const archive=normalizeArchive(JSON.parse(await file.text()));
+    const current=await (await cloudStore()).listPuzzles();
+    restoreArchive=archive;libraryEntries=current;
+    $("overwriteExisting").checked=false;renderRestorePlan();$("restoreCard").showModal();
+  });
+});
+$("overwriteExisting").addEventListener("change",renderRestorePlan);
+$("cancelRestore").addEventListener("click",()=>{$("restoreCard").close();restoreArchive=null;});
+$("confirmRestore").addEventListener("click",async()=>{
+  if (libraryBusy || !restoreArchive || !requireCreator()) return;
+  const plan=restorePlan();$("restoreCard").close();
+  await libraryTask(async()=>{
+    const result=await (await cloudStore()).restorePuzzles(plan);
+    restoreArchive=null;
+    // Keep the old identity and revision. A subsequent Save must conflict until this layout is reopened.
+    status("Restored "+result.restored+" puzzles. Kept "+plan.skipped.length+" existing puzzles. Open the library to load a puzzle.");
+  });
 });
 
 const ctx = await enterGame({ bar:$("playerBar") });
@@ -958,6 +1110,11 @@ if (ctx) {
     if (saved !== null) {
       const draft = preparePuzzleData(saved);
       pieces=draft.pieces; difficulty=draft.difficulty; exitRow=draft.exitRow;
+      if (validPuzzleId(saved.libraryId) && Number.isSafeInteger(saved.libraryRevision) && saved.libraryRevision>=0) {
+        libraryId=saved.libraryId; libraryRevision=saved.libraryRevision;
+        knownLibraryRevisions.set(libraryId,libraryRevision);
+      }
+      $("puzzleTitle").value=typeof saved.title==="string" && saved.title.length<=80 ? saved.title : "Untitled puzzle";
       nextId=nextPieceId(pieces);
       status("Restored locally saved draft for " + ctx.player.code + ".");
       // Only SL may persist migrations. Other players can still read their old drafts.
@@ -965,7 +1122,8 @@ if (ctx) {
           (saved.difficulty !== difficulty || saved.exitRow !== exitRow ||
            JSON.stringify(saved.pieces) !== JSON.stringify(pieces))) {
         try {
-          localStorage.setItem(storageKey, JSON.stringify({...draft, nextId, savedAt:saved.savedAt}));
+          localStorage.setItem(storageKey, JSON.stringify({...draft, nextId, savedAt:saved.savedAt,
+            title:$("puzzleTitle").value,libraryId,libraryRevision}));
         } catch (_) { status("Draft restored. The device could not save its updated format."); }
       }
     }

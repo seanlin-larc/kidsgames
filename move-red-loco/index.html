@@ -182,6 +182,15 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
 .notice-card h2{margin:0 0 12px;font-size:24px}
 .notice-card p{margin:0 0 20px;font-size:17px;line-height:1.5;white-space:pre-line}
 .notice-card button{min-width:96px}
+.library-name{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+.library-name input,.library-select{font:inherit;background:var(--surface2);color:var(--text);
+  border:1px solid var(--border);border-radius:6px;padding:8px;min-width:0;width:100%}
+.library-select{min-height:150px;margin:0 0 14px;text-align:left}
+.dialog-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:16px}
+.restore-choice{display:flex;align-items:center;gap:8px;text-align:left;font-size:14px}
+.restore-choice input{width:20px;height:20px;flex:none}
+#libraryTools{display:flex;flex-wrap:wrap;gap:6px}
+#librarySetup{font-size:11px;line-height:1.4;color:var(--muted);margin:0}
 @media(max-width:980px){
  .workspace{grid-template-columns:minmax(0,1fr) minmax(205px,250px);gap:10px}
  .left-panel{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;align-items:center}
@@ -295,6 +304,9 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
   <div class="workspace">
    <aside class="left-panel" aria-label="Puzzle controls">
     <h2 class="panel-heading">Controls</h2>
+    <label id="puzzleNameLabel" class="library-name" hidden>Puzzle name
+      <input id="puzzleTitle" type="text" maxlength="80" value="Untitled puzzle" autocomplete="off">
+    </label>
     <div class="edit-actions">
      <button id="reset" class="action" type="button">Reset</button>
      <button id="undo" class="action" type="button">Undo</button>
@@ -386,6 +398,14 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
     <button type="button" id="import">Import JSON</button>
     <input id="importFile" type="file" accept=".json,application/json" hidden>
   </div>
+  <div id="libraryTools" class="extras" hidden>
+    <button id="openLibrary" type="button">Open library</button>
+    <button id="newPuzzle" type="button">New puzzle</button>
+    <button id="downloadArchive" type="button">Download archive</button>
+    <button id="restoreArchive" type="button">Restore archive</button>
+    <input id="archiveFile" type="file" accept=".json,application/json" hidden>
+  </div>
+  <p id="librarySetup">The cloud library is not available yet. Save keeps a device draft.</p>
 
     </section>
     <aside id="moveLog" class="move-log" role="region" aria-label="Play move history" tabindex="0" hidden>
@@ -401,6 +421,24 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
   <h2 id="noticeTitle"></h2>
   <p id="noticeMessage"></p>
   <button id="closeNotice" class="action primary" type="button" autofocus>OK</button>
+</dialog>
+<dialog id="libraryCard" class="notice-card" aria-labelledby="libraryTitle">
+  <h2 id="libraryTitle">Family puzzles</h2>
+  <p id="libraryMessage"></p>
+  <select id="librarySelect" class="library-select" size="6" aria-label="Saved puzzles"></select>
+  <div class="dialog-actions">
+    <button id="closeLibrary" class="action" type="button">Cancel</button>
+    <button id="loadPuzzle" class="action primary" type="button">Open puzzle</button>
+  </div>
+</dialog>
+<dialog id="restoreCard" class="notice-card" aria-labelledby="restoreTitle" aria-describedby="restoreSummary">
+  <h2 id="restoreTitle">Restore puzzle archive</h2>
+  <p id="restoreSummary"></p>
+  <label class="restore-choice"><input id="overwriteExisting" type="checkbox">Replace puzzles with matching IDs</label>
+  <div class="dialog-actions">
+    <button id="cancelRestore" class="action" type="button">Cancel</button>
+    <button id="confirmRestore" class="action primary" type="button">Restore</button>
+  </div>
 </dialog>
 <script type="module" src="./editor.js"></script>
 </body>

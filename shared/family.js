@@ -40,6 +40,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+// Games reuse this initialized database and its existing authenticated session.
+export { db };
 
 // Resolves once Firebase has restored any saved sign-in (first auth state event).
 // This needs no network.
@@ -166,3 +168,4 @@ export async function topTimes(game, level, n = 10) {
     return { id: d.id, player: x.player, time: x.time, date: when ? when.toDate() : null };
   });
 }
+

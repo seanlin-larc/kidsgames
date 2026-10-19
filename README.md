@@ -29,7 +29,8 @@ kidsgames/
 │   ├── index.html      7×7 board editor
 │   ├── editor.js       Drag/drop and local drafts
 │   ├── puzzle-data.js  Shared JSON and device draft validation
-│   ├── puzzles/        Reviewed puzzle JSON files (see its README)
+│   ├── library-*.js    Firestore library and JSON archive handling
+│   ├── puzzles/        Puzzle storage and archive documentation
 │   ├── solver.js       BFS shortest-solution checker
 │   ├── play-rules.js   Valid Play moves and exit logic
 │   └── solver-worker.js
@@ -117,3 +118,10 @@ python -m http.server 8000
 Opening `index.html` from disk (`file://`) does not work: browsers block module scripts there,
 and the Firebase API key accepts only `seanlin-larc.github.io` and `localhost:8000`.
 
+
+## Puzzle library setup
+
+Move The Red Locomotive will use Firestore for its shared puzzle library.
+The code remains staged off until the prepared rules are published.
+See [Firebase console steps](firebase/PUZZLE_SETUP.md).
+Existing device drafts remain available during setup.
