@@ -939,8 +939,13 @@ document.querySelectorAll("[data-save-tier]").forEach(btn=>btn.addEventListener(
         libraryRevision=saved.revision;
         knownLibraryRevisions.set(libraryId,libraryRevision);
         try { writeDraft(localStorage,storageKey,{...draft,libraryRevision}); }
-        catch (_) { status("Saved in the family library. The device copy could not be updated."); return; }
+        catch (_) {
+          status("Saved in the family library. The device copy could not be updated.");
+          showNotice("Puzzle saved", "Saved in the family library:\n" + draft.title + "\n\nThe device copy could not be updated.");
+          return;
+        }
         status("Saved in the family library: " + draft.title + ".");
+        showNotice("Puzzle saved", "Saved in the family library:\n" + draft.title);
       });
     }
   } catch(error) {

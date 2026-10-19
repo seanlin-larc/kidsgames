@@ -55,9 +55,14 @@ if(!sessionStorage.getItem('seeded')){{
     return context,page,errors
 
 
-def save(page):
+def save(page, acknowledge=True):
     page.locator("#save").click()
     page.get_by_role("button",name="Save as Starter",exact=True).click()
+    if acknowledge:
+        expect(page.locator("#noticeCard")).to_be_visible()
+        if page.locator("#noticeTitle").inner_text()=="Puzzle saved":
+            expect(page.locator("#noticeMessage")).to_contain_text("Saved in the family library:")
+            page.locator("#closeNotice").click()
 
 
 def cloud(page):
@@ -135,13 +140,18 @@ with sync_playwright() as playwright:
     # A slow save freezes every layout mutation path until the awaited write completes.
     before=page.locator("#board").inner_html()
     page.evaluate("window.testCloudDelay=600")
-    save(page)
+    save(page, acknowledge=False)
     expect(page.locator("#save")).to_be_disabled()
+    expect(page.locator("#noticeCard")).not_to_be_visible()
     page.locator('.exit-gate[data-exit-row="3"]').dispatch_event("click")
     page.locator("#item-h3").dispatch_event("keydown",dict(key="Enter"))
     page.locator('#board .tile[data-x="0"][data-y="0"]').dispatch_event("pointerdown",dict(button=0))
     page.keyboard.press("ArrowDown")
     expect(page.locator("#status")).to_contain_text("Saved in the family library")
+    expect(page.locator("#noticeTitle")).to_have_text("Puzzle saved")
+    expect(page.locator("#noticeMessage")).to_have_text("Saved in the family library:\nArchive replacement")
+    page.screenshot(path=str(ARTIFACTS / "cloud-save-confirmation.png"))
+    page.locator("#closeNotice").click()
     assert page.locator("#board").inner_html()==before
     page.evaluate("window.testCloudDelay=0")
     print("PASS: delayed cloud Save blocks exit, palette, board, and keyboard edits")
@@ -160,8 +170,9 @@ with sync_playwright() as playwright:
     page.locator("#closeNotice").click()
     page.evaluate("window.testCloudFailure=false")
     context.set_offline(True)
-    save(page)
+    save(page, acknowledge=False)
     expect(page.locator("#status")).to_contain_text("Saved on this device")
+    expect(page.locator("#noticeCard")).not_to_be_visible()
     assert cloud(page)==before
     page.locator("#downloadArchive").click()
     expect(page.locator("#noticeMessage")).to_contain_text("Connect to the internet")
@@ -172,6 +183,26 @@ with sync_playwright() as playwright:
     assert not errors,errors
     context.close()
     print("PASS: invalid archive, failed cloud write, offline local Save, online-only archive, and offline library cache")
+
+    # A confirmed cloud write still gets a truthful confirmation if the later device copy fails.
+    context,page,errors=load(browser)
+    page.evaluate("""() => {
+      const original=Storage.prototype.setItem;
+      let cloudCommitted=false;
+      Storage.prototype.setItem=function(key,value){
+        if(cloudCommitted && key.startsWith('mrl-editor-'))throw Error('Device storage unavailable');
+        const result=original.call(this,key,value);
+        if(key==='test-cloud-puzzles')cloudCommitted=true;
+        return result;
+      };
+    }""")
+    save(page, acknowledge=False)
+    expect(page.locator("#noticeTitle")).to_have_text("Puzzle saved")
+    expect(page.locator("#noticeMessage")).to_contain_text("The device copy could not be updated.")
+    assert len(cloud(page))==1
+    assert not errors,errors
+    context.close()
+    print("PASS: cloud confirmation remains accurate when the later device copy fails")
 
     context,page,errors=load(browser,code="CJ",viewport=dict(width=390,height=844))
     page.locator("#downloadArchive").click()

@@ -9,7 +9,7 @@ Approved family players can read puzzles.
 
 Sean replied “publish.” after the request to confirm rule publication.
 ChatGPT treated that reply as confirmation and enabled the cloud controls.
-The site cache is `kidsgames-v15`.
+The site cache is `kidsgames-v16`.
 The live Firebase rules were not inspected directly.
 Real Firebase Save and restore still need the check below.
 
@@ -62,9 +62,13 @@ Managed Firestore export is not used for the JSON archive.
 2. Open Move The Red Locomotive.
 3. Enter a puzzle name.
 4. Select Save and a difficulty.
-5. Check that the status says **Saved in the family library**.
+5. Check the **Puzzle saved** card.
 6. Open Firestore Database → Data.
 7. Check the new document in `puzzleLibrary`.
+
+The confirmation card appears only after Firestore confirms the save.
+It names the saved puzzle and stays open until dismissed.
+If the later device copy fails, the card explains that separately.
 
 Use **Open library** to load a saved puzzle on another signed-in device.
 Use **New puzzle** to create a separate puzzle.
