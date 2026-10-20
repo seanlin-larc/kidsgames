@@ -17,8 +17,14 @@ Cloud controls are enabled after Sean's report of rule publication.
 Save keeps a device draft and writes a named puzzle to Firestore when online.
 Each puzzle has a stable ID and a revision.
 Open library loads existing puzzles; New puzzle creates a separate layout.
-Only SL can Save, Download archive, or Restore archive through the interface.
+Only SL can Save, Manage library, Download archive, or Restore archive through the interface.
 Firestore rules enforce SL-only writes and family reads.
+In Build, **Manage library** lists saved puzzles with an **×** button beside each entry.
+Select **×**, then confirm to delete that puzzle from the family library.
+Cancel keeps the puzzle. Deletion requires internet and checks that the puzzle has not changed since the list loaded.
+Successful deletion refreshes the device's library copy and keeps the current board and device draft.
+A stale Save cannot silently recreate the deleted puzzle.
+Publish the updated `firebase/firestore.rules` to permit SL-only deletion on the live site.
 
 Archives contain up to 200 puzzles in one JSON file, with a 2 MB limit.
 The archive excludes account IDs and game statistics.

@@ -2,14 +2,14 @@
 
 The puzzle library uses the existing Cloud Firestore database in `kidsgame-7a262`.
 It stores one document per puzzle in `puzzleLibrary`.
-SL can save and restore puzzles.
+SL can save, restore, and delete puzzles.
 Approved family players can read puzzles.
 
 ## Activation status
 
 Sean replied “publish.” after the request to confirm rule publication.
 ChatGPT treated that reply as confirmation and enabled the cloud controls.
-The site cache is `kidsgames-v16`.
+The prepared site cache is `kidsgames-v17`.
 The live Firebase rules were not inspected directly.
 Real Firebase Save and restore still need the check below.
 
@@ -74,6 +74,25 @@ Use **Open library** to load a saved puzzle on another signed-in device.
 Use **New puzzle** to create a separate puzzle.
 Saving a loaded puzzle updates its existing document.
 
+### Manage library and delete duplicates
+
+Publish the updated complete `firebase/firestore.rules` file before using deletion on the live site.
+Earlier rules reject all puzzle deletions. The updated rule permits only SL to delete library documents.
+Player records and game statistics keep their existing protections.
+
+1. Sign in as SL and select Build in the workshop.
+2. Select **Manage library** on the controls card.
+3. Select **×** beside the duplicate puzzle.
+4. Check the puzzle name in the confirmation.
+5. Confirm to delete, or cancel to keep the puzzle.
+
+The list removes the entry only after Firestore confirms deletion.
+The current board and device draft stay available.
+The device's cached library removes the deleted entry.
+A puzzle changed on another device requires reopening Manage library before deletion.
+Failed or offline requests keep the entry and show an error.
+Deletion does not queue an offline request or delete any other puzzle.
+
 Use **Download archive** to download all saved puzzles as JSON.
 The archive reads current server data and requires an internet connection.
 It contains puzzle IDs, names, layouts, difficulty, revisions, and date strings.
@@ -97,13 +116,14 @@ Offline Save keeps a device draft and reports that cloud saving needs internet.
 It does not silently queue a later cloud update.
 Connect and select Save again to send that draft.
 The library caches a validated copy for offline reading after an online library load.
-Archive download and restore always require a server connection.
+Archive download, restore, and library management always require a server connection.
 
 ## Verification boundary
 
 Local app tests simulate family identities and Firestore SDK responses.
-Emulator tests are included, but they were not run in this environment.
-Rule publication is based on Sean's reply; console compilation was not checked independently.
+All seven Firestore emulator tests pass, including SL-only deletion and the 200-document restore transaction.
+All 67 unit cases and both Chromium suites pass, including confirmed deletion, cancellation, errors, and phone touch controls.
+Rule publication is based on Sean's earlier reply; the new deletion rule has not been published by this change.
 Existing player and statistics rule text was checked against the repository and remains unchanged.
 These tests do not establish that the console rules were published.
 Real Firebase saving and cross-device restoration still need the activation check above.

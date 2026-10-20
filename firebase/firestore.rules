@@ -75,7 +75,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Shared puzzle library. Players can read; only the server's SL account can save.
+    // Shared puzzle library. Players can read; only the server's SL account can change it.
     // These checks protect metadata and the outer shape. The application validates
     // each block, board bounds, and overlap before saving and after reading.
     function puzzleIdOk(id) {
@@ -113,7 +113,7 @@ service cloud.firestore {
         && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.updatedAt == request.time;
-      allow delete: if false;
+      allow delete: if isFamily() && playerCode() == 'SL';
     }
 
     // Everything else stays locked.

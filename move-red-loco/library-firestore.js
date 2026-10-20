@@ -15,7 +15,8 @@ const store = createLibraryStore({
   },
   transact:work => runTransaction(db, transaction => work({
     async get(id) {const snap=await transaction.get(reference(id));return snap.exists()?snap.data():null;},
-    set:(id,data)=>transaction.set(reference(id),data)
+    set:(id,data)=>transaction.set(reference(id),data),
+    delete:id=>transaction.delete(reference(id))
   }))
 });
-export const {listPuzzles,savePuzzle,restorePuzzles} = store;
+export const {listPuzzles,savePuzzle,deletePuzzle,restorePuzzles} = store;

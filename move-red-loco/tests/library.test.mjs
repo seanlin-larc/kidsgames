@@ -18,9 +18,9 @@ function setup(records=[],code="SL") {
     listFromServer:async()=>{reads++;return [...docs].map(([id,p])=>({...p,id}));},
     async transact(work) {
       const staged=[];
-      const result=await work({get:async id=>docs.get(id)||null,set:(id,data)=>staged.push([id,data])});
+      const result=await work({get:async id=>docs.get(id)||null,set:(id,data)=>staged.push([id,data]),delete:id=>staged.push([id,null])});
       if(fail)throw Error("Network interrupted");
-      for(const [id,data] of staged){docs.set(id,data);writes++;}
+      for(const [id,data] of staged){if(data===null)docs.delete(id);else docs.set(id,data);writes++;}
       return result;
     }
   });
@@ -91,6 +91,7 @@ for(const code of ["CJ","YC","JY","Guest",null])test("cloud mutations refuse "+c
   const s=setup([],code),plan=planRestore(makeArchive([puzzle()],when),[]);
   await assert.rejects(s.store.savePuzzle({id:"puzzle-1",title:"New",layout:layout(puzzle())}),/Only SL/);
   await assert.rejects(s.store.restorePuzzles(plan),/Only SL/);
+  await assert.rejects(s.store.deletePuzzle({id:"puzzle-1",expectedRevision:1}),/Only SL/);
   assert.equal(s.writes,0);
 });
 test("server list is fresh and returns no account data",async()=>{
@@ -136,4 +137,33 @@ test("a 200-puzzle archive restores atomically in the adapter",async()=>{
   const a=makeArchive(Array.from({length:200},(_,i)=>puzzle("p-"+i)),when);
   await s.store.restorePuzzles(planRestore(a,[]));
   assert.equal(s.writes,200);assert.equal(s.docs.size,200);
+});
+test("SL deletion removes only the selected puzzle and stale saves cannot recreate it",async()=>{
+  const s=setup([puzzle(),puzzle("duplicate")]);
+  assert.deepEqual(await s.store.deletePuzzle({id:"duplicate",expectedRevision:1}),{id:"duplicate"});
+  assert.equal(s.docs.has("duplicate"),false);
+  assert.equal(s.docs.has("puzzle-1"),true);
+  assert.equal(s.writes,1);
+  await assert.rejects(s.store.savePuzzle({id:"duplicate",title:"Old layout",layout:layout(puzzle()),expectedRevision:1}),/another device/);
+  assert.equal(s.docs.has("duplicate"),false);
+});
+test("deletion rejects changed and already deleted puzzles without writes",async()=>{
+  const s=setup([puzzle("puzzle-1",{revision:2})]);
+  for(const id of ["puzzle-1","missing"]) {
+    await assert.rejects(s.store.deletePuzzle({id,expectedRevision:1}),/changed or was deleted/);
+  }
+  assert.equal(s.docs.size,1);assert.equal(s.writes,0);
+});
+test("deletion validates identity and revision before touching the library",async()=>{
+  const s=setup([puzzle()]);
+  for(const value of [
+    {id:"../puzzle-1",expectedRevision:1},
+    ...[undefined,0,-1,1.5,Number.MAX_SAFE_INTEGER].map(expectedRevision=>({id:"puzzle-1",expectedRevision}))
+  ]) await assert.rejects(s.store.deletePuzzle(value),/Invalid puzzle ID or revision/);
+  assert.equal(s.docs.size,1);assert.equal(s.writes,0);
+});
+test("interrupted deletion retains every puzzle",async()=>{
+  const s=setup([puzzle(),puzzle("duplicate")]);s.fail();
+  await assert.rejects(s.store.deletePuzzle({id:"duplicate",expectedRevision:1}),/Network/);
+  assert.equal(s.docs.size,2);assert.equal(s.writes,0);
 });

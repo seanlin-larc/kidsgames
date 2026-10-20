@@ -186,6 +186,12 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
 .library-name input,.library-select{font:inherit;background:var(--surface2);color:var(--text);
   border:1px solid var(--border);border-radius:6px;padding:8px;min-width:0;width:100%}
 .library-select{min-height:150px;margin:0 0 14px;text-align:left}
+.manage-list{list-style:none;padding:0;margin:0;max-height:45dvh;overflow-y:auto;text-align:left}
+.manage-list li{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.manage-entry{flex:1;min-width:0;overflow-wrap:anywhere}
+.manage-entry strong,.manage-entry small{display:block}
+.manage-entry small{margin-top:4px;color:var(--muted);font-size:12px}
+.notice-card .library-delete{min-width:44px;min-height:44px;flex:none;font-size:24px;color:var(--bad)}
 .dialog-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:16px}
 .restore-choice{display:flex;align-items:center;gap:8px;text-align:left;font-size:14px}
 .restore-choice input{width:20px;height:20px;flex:none}
@@ -322,6 +328,7 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
       </div>
      </div>
     </div>
+    <button id="manageLibrary" class="action" type="button" hidden>Manage library</button>
     <div id="modeToggle" role="group" aria-label="Workshop mode">
      <button id="buildMode" type="button" aria-pressed="true">Build</button>
      <button id="playMode" type="button" aria-pressed="false">Play</button>
@@ -429,6 +436,14 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
   <div class="dialog-actions">
     <button id="closeLibrary" class="action" type="button">Cancel</button>
     <button id="loadPuzzle" class="action primary" type="button">Open puzzle</button>
+  </div>
+</dialog>
+<dialog id="manageLibraryCard" class="notice-card" aria-labelledby="manageLibraryTitle" aria-describedby="manageLibraryMessage">
+  <h2 id="manageLibraryTitle">Manage library</h2>
+  <p id="manageLibraryMessage" role="status" aria-live="polite"></p>
+  <ul id="manageLibraryList" class="manage-list" aria-label="Puzzles in the library"></ul>
+  <div class="dialog-actions">
+    <button id="closeManageLibrary" class="action" type="button" autofocus>Done</button>
   </div>
 </dialog>
 <dialog id="restoreCard" class="notice-card" aria-labelledby="restoreTitle" aria-describedby="restoreSummary">

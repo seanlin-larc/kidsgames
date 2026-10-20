@@ -55,7 +55,19 @@ test('SL update requires next revision and preserves creation identity and date'
   }
   await assertSucceeds(updateDoc(r, { title: 'Changed', revision: 2, updatedAt: serverTimestamp(), updatedBy: 'sean' }));
   await assertFails(updateDoc(ref(dbFor('child')), { revision: 3, updatedAt: serverTimestamp(), updatedBy: 'child' }));
-  await assertFails(deleteDoc(r));
+});
+
+test('only SL can delete library puzzles; other puzzles and statistics stay intact', async () => {
+  const db = dbFor('sean');
+  await assertSucceeds(setDoc(ref(db), data()));
+  await assertSucceeds(setDoc(ref(db, 'keep-this'), data()));
+  for (const uid of [null, 'outsider', 'child']) {
+    await assertFails(deleteDoc(ref(dbFor(uid))));
+  }
+  assert.equal((await getDoc(ref(db))).exists(), true);
+  await assertSucceeds(deleteDoc(ref(db)));
+  assert.equal((await getDoc(ref(db))).exists(), false);
+  assert.equal((await getDoc(ref(db, 'keep-this'))).exists(), true);
 });
 
 test('create rejects forged metadata, unsupported shape, and invalid document ids', async () => {

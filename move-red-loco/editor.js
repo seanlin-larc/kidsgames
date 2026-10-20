@@ -473,6 +473,9 @@ function render() {
   $("libraryTools").hidden = !LIBRARY_ENABLED;
   $("puzzleNameLabel").hidden = !LIBRARY_ENABLED;
   $("librarySetup").hidden = LIBRARY_ENABLED;
+  $("manageLibrary").hidden = !LIBRARY_ENABLED || playerContext?.player.code !== "SL" || mode !== "build";
+  $("manageLibrary").disabled = libraryBusy;
+  document.querySelectorAll("#manageLibraryCard button").forEach(el=>el.disabled=libraryBusy);
   $("puzzleTitle").disabled = libraryBusy || mode === "play";
   $("buildMode").disabled = libraryBusy; $("playMode").disabled = libraryBusy;
   document.querySelectorAll("#libraryTools button").forEach(el=>el.disabled=libraryBusy||mode!=="build");
@@ -795,7 +798,7 @@ $("rotate").addEventListener("click",rotateSelected);
 $("remove").addEventListener("click",removeSelected);
 $("clearSelection").addEventListener("click",()=>{ if(mode!=="build")return; selectedId=null; selectedTemplate=null; render();status("Selection cleared."); });
 document.addEventListener("keydown", e=>{
-  if ($("noticeCard").open || $("libraryCard").open || $("restoreCard").open || libraryBusy) return;
+  if ($("noticeCard").open || $("libraryCard").open || $("manageLibraryCard").open || $("restoreCard").open || libraryBusy) return;
   const tag = e.target?.tagName;
   if (["INPUT","TEXTAREA","SELECT"].includes(tag)) return;
   if (e.key === "Escape" && !$("saveMenu").hidden) { closeSaveMenu(); e.preventDefault(); return; }
@@ -1042,6 +1045,47 @@ $("openLibrary").addEventListener("click",()=>{
   });
 });
 $("closeLibrary").addEventListener("click",()=>$("libraryCard").close());
+function renderManagedLibrary(message) {
+  const list=$("manageLibraryList");list.replaceChildren();
+  for (const puzzle of libraryEntries) {
+    const row=document.createElement("li"), entry=document.createElement("div");
+    entry.className="manage-entry";
+    const title=document.createElement("strong"), details=document.createElement("small");
+    title.textContent=puzzle.title;
+    details.textContent=puzzle.difficulty+" · Updated "+new Date(puzzle.updatedAt).toLocaleString();
+    entry.append(title,details);
+    const remove=document.createElement("button");
+    remove.type="button";remove.className="action library-delete";remove.textContent="×";
+    remove.dataset.puzzleId=puzzle.id;remove.setAttribute("aria-label","Delete "+puzzle.title);
+    remove.addEventListener("click",()=>{void deleteLibraryPuzzle(puzzle);});
+    row.append(entry,remove);list.appendChild(row);
+  }
+  $("manageLibraryMessage").textContent=(message ? message+"\n" : "")+
+    (libraryEntries.length ? "Select × beside a puzzle to delete it." : "No puzzles have been saved yet.");
+}
+async function deleteLibraryPuzzle(puzzle) {
+  if (libraryBusy || mode!=="build" || playerContext?.player.code!=="SL") return;
+  if (!confirm('Delete "'+puzzle.title+'" from the family library? This cannot be undone.')) return;
+  const deleted=await libraryTask(async()=>{
+    await (await cloudStore()).deletePuzzle({id:puzzle.id,expectedRevision:puzzle.revision});
+    // Preserve the editor's identity and revision: Save must not silently recreate a deleted puzzle.
+    libraryEntries=libraryEntries.filter(entry=>entry.id!==puzzle.id);
+    cacheLibrary(libraryEntries);
+    const message='Deleted "'+puzzle.title+'" from the family library.';
+    renderManagedLibrary(message);status(message);
+    return true;
+  });
+  if (deleted) ($("manageLibraryList").querySelector("button")||$("closeManageLibrary")).focus();
+}
+$("manageLibrary").addEventListener("click",()=>{
+  if (!LIBRARY_ENABLED || mode!=="build" || libraryBusy || playerContext?.player.code!=="SL") return;
+  void libraryTask(async()=>{
+    libraryEntries=await (await cloudStore()).listPuzzles();
+    cacheLibrary(libraryEntries);renderManagedLibrary();$("manageLibraryCard").showModal();
+  });
+});
+$("closeManageLibrary").addEventListener("click",()=>{if(!libraryBusy)$("manageLibraryCard").close();});
+$("manageLibraryCard").addEventListener("cancel",event=>{if(libraryBusy)event.preventDefault();});
 $("loadPuzzle").addEventListener("click",()=>{
   if (libraryBusy || mode!=="build") return;
   const puzzle=libraryEntries.find(p=>p.id===$("librarySelect").value);

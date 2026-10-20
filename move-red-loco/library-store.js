@@ -7,7 +7,7 @@ const conflict = () => Object.assign(new Error("This puzzle changed on another d
 export function createLibraryStore(adapter) {
   async function player(creator = false) {
     const p = await adapter.player();
-    if (!p || (creator && p.code !== "SL")) throw Object.assign(new Error("Only SL can save or restore puzzles."),{code:"permission-denied"});
+    if (!p || (creator && p.code !== "SL")) throw Object.assign(new Error("Only SL can change the puzzle library."),{code:"permission-denied"});
     return p;
   }
   function content(title, layout) {
@@ -35,6 +35,19 @@ export function createLibraryStore(adapter) {
       tx.set(id,{...data,revision,createdAt:old?.createdAt ?? adapter.timestamp(),
         updatedAt:adapter.timestamp(),createdBy:old?.createdBy ?? p.uid,updatedBy:p.uid});
       return {id,revision};
+    });
+  }
+  async function deletePuzzle({id,expectedRevision}) {
+    await player(true);
+    if (!validPuzzleId(id) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1 ||
+        expectedRevision >= Number.MAX_SAFE_INTEGER) throw Error("Invalid puzzle ID or revision.");
+    return adapter.transact(async tx => {
+      const old = await tx.get(id);
+      if (!old || old.revision !== expectedRevision) {
+        throw Object.assign(new Error("This puzzle changed or was deleted on another device. Close Manage library and open it again before deleting."),{code:"app/conflict"});
+      }
+      tx.delete(id);
+      return {id};
     });
   }
   async function restorePuzzles(plan) {
@@ -67,5 +80,5 @@ export function createLibraryStore(adapter) {
       return {restored:entries.length};
     });
   }
-  return {listPuzzles,savePuzzle,restorePuzzles};
+  return {listPuzzles,savePuzzle,deletePuzzle,restorePuzzles};
 }

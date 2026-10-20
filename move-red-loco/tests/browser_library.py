@@ -22,19 +22,25 @@ export async function runTransaction(db,work){
  const staged=[];
  const result=await work({
   get:async ref=>{const data=read()[ref.id];return {exists:()=>!!data,data:()=>fromWire(data)};},
-  set:(ref,data)=>staged.push([ref.id,toWire(data)])
+  set:(ref,data)=>staged.push([ref.id,toWire(data)]),
+  delete:ref=>staged.push([ref.id,null])
  });
  if(window.testCloudDelay)await new Promise(resolve=>setTimeout(resolve,window.testCloudDelay));
  if(window.testCloudFailure)throw Error('Network interrupted');
- const all=read();for(const [id,data]of staged)all[id]=data;
+ const all=read();for(const [id,data]of staged){if(data===null)delete all[id];else all[id]=data;}
  localStorage.setItem('test-cloud-puzzles',JSON.stringify(all));
  return result;
 }
 """
 
 
+def accept_dialog(dialog):
+    dialog.accept()
+
+
 def load(browser, code="SL", viewport=None):
-    context = browser.new_context(viewport=viewport or dict(width=1200, height=900), service_workers="block", accept_downloads=True)
+    context = browser.new_context(viewport=viewport or dict(width=1200, height=900), has_touch=viewport is not None,
+                                  service_workers="block", accept_downloads=True)
     context.route(ORIGIN + "/**", route_files)
     context.route("**/library-config.js", lambda route: route.fulfill(content_type="text/javascript", body="export const LIBRARY_ENABLED=true;"))
     context.route("**/shared/family.js", lambda route: route.fulfill(content_type="text/javascript", body="export const db={};export async function currentPlayer(){return {uid:'uid-'+window.testPlayer,code:window.testPlayer};}"))
@@ -49,7 +55,7 @@ if(!sessionStorage.getItem('seeded')){{
     page=context.new_page()
     errors=[]
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.on("dialog", lambda dialog: dialog.accept())
+    page.on("dialog", accept_dialog)
     page.goto(ORIGIN+"/move-red-loco/")
     expect(page.locator("#libraryTools")).to_be_visible()
     return context,page,errors
@@ -205,6 +211,9 @@ with sync_playwright() as playwright:
     print("PASS: cloud confirmation remains accurate when the later device copy fails")
 
     context,page,errors=load(browser,code="CJ",viewport=dict(width=390,height=844))
+    expect(page.locator("#manageLibrary")).not_to_be_visible()
+    page.locator("#manageLibrary").dispatch_event("click")
+    expect(page.locator("#manageLibraryCard")).not_to_be_visible()
     page.locator("#downloadArchive").click()
     expect(page.locator("#noticeMessage")).to_have_text("Only SL can save a puzzle layout.")
     page.locator("#closeNotice").click()
@@ -219,4 +228,103 @@ with sync_playwright() as playwright:
     assert not errors,errors
     context.close()
     print("PASS: family read access, SL-only archive controls, and phone layout")
+
+    context,page,errors=load(browser)
+    page.locator("#puzzleTitle").fill("Duplicate puzzle")
+    save(page)
+    saved_id=next(iter(cloud(page)))
+    page.evaluate("""() => {
+      const records=JSON.parse(localStorage.getItem('test-cloud-puzzles'));
+      records['duplicate-puzzle']={...Object.values(records)[0]};
+      localStorage.setItem('test-cloud-puzzles',JSON.stringify(records));
+    }""")
+    board_before=page.locator("#board").inner_html()
+    draft_before=page.evaluate("localStorage.getItem('mrl-editor-v1:uid-SL')")
+    expect(page.locator(".left-panel #manageLibrary")).to_be_visible()
+    page.locator("#manageLibrary").click()
+    expect(page.locator("#manageLibraryList li")).to_have_count(2)
+    page.screenshot(path=str(ARTIFACTS / "manage-library-desktop.png"))
+    page.remove_listener("dialog", accept_dialog)
+    confirmations=[]
+    def cancel_delete(dialog):
+        confirmations.append(dialog.message)
+        dialog.dismiss()
+    page.once("dialog",cancel_delete)
+    page.locator('[data-puzzle-id="duplicate-puzzle"]').click()
+    assert len(confirmations)==1 and 'Delete "Duplicate puzzle"' in confirmations[0]
+    assert len(cloud(page))==2
+    expect(page.locator("#manageLibraryList li")).to_have_count(2)
+    page.evaluate("window.testCloudDelay=600")
+    page.once("dialog",lambda dialog: dialog.accept())
+    page.locator('[data-puzzle-id="duplicate-puzzle"]').click()
+    expect(page.locator("#closeManageLibrary")).to_be_disabled()
+    expect(page.locator(".library-delete").first).to_be_disabled()
+    page.keyboard.press("Escape")
+    expect(page.locator("#manageLibraryCard")).to_be_visible()
+    expect(page.locator("#manageLibraryList li")).to_have_count(1)
+    expect(page.locator("#manageLibraryMessage")).to_contain_text('Deleted "Duplicate puzzle"')
+    assert list(cloud(page))==[saved_id]
+    assert page.locator("#board").inner_html()==board_before
+    assert page.evaluate("localStorage.getItem('mrl-editor-v1:uid-SL')")==draft_before
+    cached=page.evaluate("JSON.parse(localStorage.getItem('mrl-library-v1:uid-SL'))")
+    assert [p['id'] for p in cached]==[saved_id]
+    page.evaluate("window.testCloudDelay=0")
+    print("PASS: Manage library confirms each deletion, cancellation preserves both duplicates, busy controls prevent repeated deletion, and cache updates")
+
+    for flag, expected in [("testCloudFailure","Network interrupted"),("testCloudDenied","Firebase refused")]:
+        before=cloud(page)
+        page.evaluate(f"window.{flag}=true")
+        page.once("dialog",lambda dialog: dialog.accept())
+        page.locator(".library-delete").click()
+        expect(page.locator("#noticeMessage")).to_contain_text(expected)
+        assert cloud(page)==before
+        expect(page.locator("#manageLibraryList li")).to_have_count(1)
+        page.locator("#closeNotice").click()
+        page.evaluate(f"window.{flag}=false")
+    page.evaluate("""() => {
+      const records=JSON.parse(localStorage.getItem('test-cloud-puzzles'));
+      Object.values(records)[0].revision++;
+      localStorage.setItem('test-cloud-puzzles',JSON.stringify(records));
+    }""")
+    page.once("dialog",lambda dialog: dialog.accept())
+    page.locator(".library-delete").click()
+    expect(page.locator("#noticeMessage")).to_contain_text("changed or was deleted")
+    assert len(cloud(page))==1
+    page.locator("#closeNotice").click()
+    page.locator("#closeManageLibrary").click()
+    page.locator("#manageLibrary").click()
+    page.once("dialog",lambda dialog: dialog.accept())
+    page.locator(".library-delete").click()
+    expect(page.locator("#manageLibraryList li")).to_have_count(0)
+    expect(page.locator("#manageLibraryMessage")).to_contain_text("No puzzles have been saved yet")
+    assert cloud(page)=={}
+    page.locator("#closeManageLibrary").click()
+    save(page)
+    expect(page.locator("#noticeMessage")).to_contain_text("changed on another device")
+    assert cloud(page)=={}
+    page.locator("#closeNotice").click()
+    context.set_offline(True)
+    page.locator("#manageLibrary").click()
+    expect(page.locator("#noticeMessage")).to_contain_text("Connect to the internet")
+    page.locator("#closeNotice").click()
+    page.locator("#openLibrary").click()
+    expect(page.locator("#librarySelect option")).to_have_count(0)
+    assert not errors,errors
+    context.close()
+    print("PASS: interrupted, denied, stale, and offline deletion preserve data; empty library and stale Save do not recreate deleted puzzles")
+
+    context,page,errors=load(browser,viewport=dict(width=390,height=844))
+    page.locator("#puzzleTitle").fill("A duplicate puzzle with a long name for the phone screen")
+    save(page)
+    page.locator("#manageLibrary").tap()
+    expect(page.locator("#manageLibraryList li")).to_have_count(1)
+    assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+    assert page.locator("#manageLibraryList").evaluate("el=>el.scrollWidth<=el.clientWidth")
+    page.screenshot(path=str(ARTIFACTS / "manage-library-phone.png"))
+    page.locator(".library-delete").tap()
+    expect(page.locator("#manageLibraryList li")).to_have_count(0)
+    assert cloud(page)=={}
+    assert not errors,errors
+    context.close()
+    print("PASS: phone touch deletion and long puzzle names fit the management card")
     browser.close()
