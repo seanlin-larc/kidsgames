@@ -1,6 +1,6 @@
 # Move The Red Locomotive
 
-**Status (2026-10-20): The game menu opens the saved-puzzle playing page. The workshop retains its existing URL. Website and rules publication remain separate steps.**
+**Status (2026-10-21): The game menu opens the saved-puzzle playing page. The workshop retains its existing URL. Website and rules publication remain separate steps.**
 
 - [Open the Puzzle Workshop](https://seanlin-larc.github.io/kidsgames/move-red-loco/)
 - [Design plan and notes](https://github.com/seanlin-larc/notes-with-llm/blob/main/projects/kidsgame/2026-10-15_move-red-locomotive-plan.md)
@@ -16,17 +16,18 @@ See the [Firebase console instructions](../firebase/PUZZLE_SETUP.md).
 Cloud controls are enabled after Sean's report of rule publication.
 Save keeps a device draft and writes a named puzzle to Firestore when online.
 Each puzzle has a stable ID and a revision.
-Open library loads existing puzzles; New puzzle creates a separate layout.
-SL and CJ can Save and use Manage library to delete puzzles. Download archive and Restore archive controls remain SL-only.
+Manage library → ⋯ → Edit loads an existing puzzle; New/Reset starts a separate blank layout.
+SL and CJ have the same workshop access: Save, layout export, library import/export, rename, and deletion.
 Firestore rules permit SL/CJ puzzle creates and updates, SL/CJ deletion, and family reads.
 In Build, **Manage library** groups saved puzzles into the same five difficulty tiers as the playing-page selector.
-A wide card dialog shows puzzle tiles with names, update times, and adjacent **✎** rename and **×** delete buttons.
-Phones use two columns. Empty tiers show an empty message. The list scrolls while Done stays below it.
-Select **✎** to edit the saved name. SL and CJ can rename puzzles. Cancel leaves the name unchanged.
+A wide card shows puzzle tiles with names, update times, and a **⋯** menu containing Edit, Rename, and Delete.
+Phones use two columns. Empty tiers stay visible. The tiles scroll while the title, upper-right Close X, and library actions stay visible.
+Edit closes the card and loads the saved identity and revision. Confirm before replacing a nonempty layout.
+Select **Rename** to edit the saved name. SL and CJ can rename puzzles. Cancel leaves the name unchanged.
 Names must contain 1–80 characters after trimming spaces. Renaming requires internet and checks the current revision.
 Only the name and update metadata change; layouts, creation metadata, and solved status remain intact.
 The library and cached names refresh after success. Renaming does not discard editor layout changes or let stale layouts overwrite newer versions.
-Select **×**, then confirm to delete that puzzle from the family library.
+Select **Delete**, then confirm to delete that puzzle from the family library.
 Cancel keeps the puzzle. Deletion requires internet and checks that the puzzle has not changed since the list loaded.
 Successful deletion refreshes the device's library copy and keeps the current board and device draft.
 A stale Save cannot silently recreate the deleted puzzle.
@@ -34,21 +35,22 @@ Publish the updated `firebase/firestore.rules` to permit SL/CJ deletion on the l
 
 Archives contain up to 200 puzzles in one JSON file, with a 2 MB limit.
 The archive excludes account IDs and game statistics.
-Download reads fresh server data.
-Restore keeps matching IDs by default; replacement requires the explicit checkbox.
-A single transaction checks revisions and prevents partial restoration.
-New restores receive current server metadata; updates retain their original creation metadata.
+Export Full Library reads fresh server data.
+Import into Library accepts a single layout, a library puzzle, a puzzle array, or a full archive.
+A preview lists names and tiers before writing. Confirmation adds copies with fresh IDs and current server metadata.
+Existing puzzles stay intact, even when imported IDs match. One transaction prevents partial imports.
+Cancellation and invalid files make no writes. Imports require internet; the current workshop layout stays intact.
 An offline Save keeps a device draft and requires another Save when online.
 The library caches a validated copy for offline reading after an online load.
 
 ## Save and JSON integrity — 2026-10-18
 
-**SL and CJ** can use Save. Only **SL** can use Export JSON. Other players receive a permission message.
+**SL and CJ** can use Save, Export Layout, Export Full Library, and Import into Library. Other players receive a permission message.
 All players can build, import a layout, and use Play preview.
 Existing drafts remain readable for other players, without automatic migration writes.
 This is a device interface restriction. GitHub permissions control repository publication.
 
-Save keeps a local draft and attempts a cloud save when online. Export JSON downloads a portable single layout.
+Save keeps a local draft and attempts a cloud save when online. Export Layout downloads a portable layout with its puzzle name.
 Firestore replaces repository publication. See [storage and archives](puzzles/README.md).
 
 Save, Export, Import, and restore use the same layout checks.
@@ -67,14 +69,14 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 | Area | Build mode | Play mode |
 |---|---|---|
 | Header and top bar | Game title, Light/Dark/Auto appearance, player, offline, Check out, Sign out | Same |
-| **Left panel** | Reset, Undo, Redo, Save as flyout, Build/Play switch, Test result, guidance | Editor controls disabled; Build/Play, Replay, Moves, count |
+| **Left panel** | Undo, Redo, Save as flyout, Manage library, Build/Play switch, guidance | Editor controls disabled; Build/Play, Replay, Moves, count |
 | **Centre** | Fixed 7×7 square grid with one selected right-side exit (upper or lower) | Same board, with legal sliding interactions |
-| **Right panel** | Six draggable modules in a 2-column × 3-row palette, rotation/remove/deselect, JSON import/export | Scrollable log of every valid move, with highlighted Replay step |
+| **Right panel** | Six draggable modules with shared remaining counts, unchanged rotation/remove/deselect, New/Reset, Test Layout and result, layout import/export | Scrollable log of every valid move, with highlighted Replay step |
 | Bottom status | Current editor message | Move, replay, or win message |
 
 - Main content is a **three-column responsive CSS grid** (controls / square board / palette-or-history), with a maximum page width of **1200px**.
 - The centre board's maximum width responds to both viewport width and viewport height (`max-width:calc(100dvh - 168px)` on the board stage); the exit strip is 32px wide.
-- Below 980px, the controls become a compact toolbar above the board. In **portrait phone view (max-width 600px)**, Reset/Undo/Redo/Save are **above** the board, while Build/Play, Test/Moves, Replay and selection tools appear **below** it. The persistent palette card is hidden on portrait phones; the game retains its 7×7 board.
+- Below 980px, the controls become a compact toolbar above the board. In **portrait phone view (max-width 600px)**, Undo/Redo/Save are **above** the board, while Build/Play, Moves, Replay and selection/layout tools appear **below** it. The persistent palette card is hidden on portrait phones; the game retains its 7×7 board.
 - On desktop, the palette is replaced by the move history in **exactly the same right panel** in Play mode. On portrait phones, the move history is accessed by a **Moves button over the board** and opens a scrollable flyout instead of using permanent screen space.
 - **Save** offers five creator-assigned difficulty levels: **Starter, Beginner, Amateur, Pro, Freak**. A separate local slot is stored for each level, and the latest draft is restored on opening. Difficulty ratings are not automatically calculated by the solver.
 - The red locomotive **X** can only be placed on board row 3 or 4. Adding or moving X automatically opens the matching exit gate. Tapping the opposite exit in Build moves X to that row if space is available; otherwise the editor reports a blocked move.
@@ -84,6 +86,18 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 **Mouse/desktop:** drag a module from the right palette to the board, or select one and tap a target cell. While dragging, the block is **centered under the pointer**, rather than offset from its corner. The palette samples use one common 21px grid-cell size: 2×1 cars appear as 42×21px, 3×1 trains as 63×21px, and 2×2 platforms as 42×42px. Drag an already placed piece to reposition it.
 
 **Portrait phone:** long-press an empty board cell for approximately **480ms** to open a six-option block picker. Selecting one shows a **floating, centered block**, which can be dragged to a valid position or placed by tapping an empty cell. Drag a placed block **outside** the board to discard it (Undo can restore it). The large right-hand block palette is hidden; the editor's Rotate/Remove/Deselect and JSON tools remain available below the board. In Play, tap **Moves ▾** over the board to open or close the move-history flyout. A move history entry is added only for a legal slide.
+
+**Puzzle blocks counts:** each palette description is followed by `<remaining>/<total> Remaining` in the same font size.
+Horizontal and vertical two-cell cards share 12 slots; three-cell cards share five. Platforms have two, and X has one.
+Counts refresh after placement, removal, rotation, Undo/Redo, reset, or import.
+
+**Layout actions:** row one contains New/Reset and Test Layout. Row two is a full-width result panel, initially blank.
+Row three contains Export Layout and Import Layout. The middle Rotate/Remove/Deselect tools remain unchanged.
+New/Reset confirms before clearing a nonempty board, resets the name and tier, and releases the loaded library identity.
+Undo can restore the previous layout and identity. Import Layout validates before confirming replacement of a nonempty layout.
+Test Layout reports Solvable with the minimum move count, Unsolvable, Invalid layout, Inconclusive, or a solver error.
+Replay, Moves, and move counts remain on Controls in Play mode; the build tools stay hidden then.
+Colour editing, symbol editing, and new duplicate-symbol controls are deferred ideas.
 
 **Piece letters:** one red locomotive = **X**; 2-cell trains (2×1 or 1×2) share letters **A–L**; 3-cell trains (3×1 or 1×3) share **O–S**; 2×2 platforms use **U** and **V**. Letters stay attached to pieces through dragging, rotation, Undo/Redo and Save/Export. If an older imported or locally saved draft lacks letters, the editor assigns the first available letters in each group. The editor stops additions when a letter group is exhausted.
 
@@ -95,16 +109,16 @@ The workshop is designed to fit the **full editing interface within a 1200 × 90
 
 **Difficulty policy:** tiers are editorial labels, not solver thresholds. Proposed player progression: Starter teaches single-piece movement; Beginner introduces blockers; Amateur introduces multiple dependencies and platforms; Pro requires planning and reversals; Freak contains the toughest original, human-reviewed challenges. The exact cutoffs and level counts remain unapproved and should be set after children test real puzzles. See the [session handoff and current decisions](https://github.com/seanlin-larc/notes-with-llm/blob/main/projects/kidsgame/2026-10-16_move-red-loco-session-handoff.md).
 
-**Test:** deterministic breadth-first search in a Web Worker. Only the **selected exit** is usable. Each straight slide counts as one move, regardless of distance. A clear path to the active exit completes Play automatically. There is no extra exit move. Platforms can slide horizontally or vertically. The worker stops after 200,000 expanded states and reports an **inconclusive** result rather than a false "X".
+**Test Layout:** deterministic breadth-first search in a Web Worker. Only the **selected exit** is usable. Each straight slide counts as one move, regardless of distance. A clear path to the active exit completes Play automatically. There is no extra exit move. Platforms can slide horizontally or vertically. The worker stops after 200,000 expanded states and reports an **inconclusive** result rather than a false "X".
 
 **Exit rule:** select the upper exit (board row 3, zero-based 2) or lower exit (board row 4, zero-based 3). Only one exit is active. The interface shows arrows without coordinate labels. The red locomotive must be a 2×1 horizontal piece on either of those rows. An attempt to escape through the closed exit fails. Exact physical gate geometry remains provisional.
 
 
 ### Build / Play preview
 
-**Build:** the default editor. Row 2, exit selection, Test, palette, module tools, Save flyout, Import, and Export work normally.
+**Build:** the default editor. Exit selection, Test Layout, palette, existing module tools, Save flyout, and layout import/export are available.
 
-**Play:** switching modes preserves a temporary copy of the Build arrangement. The editor controls in row 2 and palette/tools below are greyed out and disabled. I11 changes from Test to Moves; J11 shows the count. G11–H11 shows Replay. The K3–K9 move log has 14 half-row-height entries before scrolling. Each successful slide adds one numbered entry with piece, direction, and travel distance; blocked attempts are not counted. The log scrolls to the newest move. Tap Moves to focus the log at its latest entry. Drag a train along its fixed axis, drag a platform along either single axis, or use arrow keys after selecting a train. Each valid slide counts as one move, regardless of distance. Play shows “Congratulations!” and “Solved in <move count> moves!” when the path to the active exit becomes clear. A clear starting board completes in zero moves.
+**Play:** switching modes preserves a temporary copy of the Build arrangement. Editing controls are disabled and the palette/tools are hidden. Controls shows Replay, Moves, and a separate move count. The move log replaces Puzzle blocks on desktop and uses a flyout on portrait phones. Each successful slide adds one numbered entry with piece, direction, and travel distance; blocked attempts are not counted. The log scrolls to the newest move. Tap Moves to focus the log at its latest entry. Drag a train along its fixed axis, drag a platform along either single axis, or use arrow keys after selecting a train. Each valid slide counts as one move, regardless of distance. Play shows “Congratulations!” and “Solved in <move count> moves!” when the path to the active exit becomes clear. A clear starting board completes in zero moves.
 
 **Replay** animates the recorded sequence at 550 milliseconds per step. It highlights each history entry and updates the on-screen move count during playback. It restores the final Play arrangement and original log when it finishes. Switching back to Build cancels any replay, restores the original puzzle, and clears the preview move count. Play does not upload a result or modify stored drafts.
 
@@ -120,8 +134,8 @@ Historical grid layout (superseded by the compact three-column workspace): CSS G
 
 1. Open the site while online and sign in on the homepage first. Then open the workshop URL above.
 2. Choose the upper or lower exit. Place the red locomotive on the matching board row. Tap the other gate and verify that only one is open.
-3. Press **Test**: a clear matching exit should return **0 steps**. Select the opposite exit in Build: X should move to that row automatically when unblocked. Confirm that the selected gate changes with X.
-4. Add a horizontal train in the same row, between the red locomotive and the gate. Test should return **X** if that train cannot leave the row.
+3. Press **Test Layout**: a clear matching exit should return **Solvable — 0 moves**. Select the opposite exit in Build: X should move to that row automatically when unblocked. Confirm that the selected gate changes with X.
+4. Add a horizontal train in the same row, between the red locomotive and the gate. Test Layout should report **Unsolvable** if that train cannot leave the row.
 5. Place a vertical train across the exit path with room to slide clear. Test should report a nonzero solvable step count.
 6. Add two blocks of the same type and confirm they usually receive different colors, neither in the red hue band. Undo and Redo a placement, then Save, reload and compare colors. Export/Import the puzzle and verify colors persist. Import an older JSON draft without hue values and check that non-red pieces are recolored but X stays red.
 7. Check Light, Dark and Auto in the top bar. On a portrait phone, hold an empty board cell, select X, drag the floating block to an exit row, long-press to choose an A–L car, and drag the placed car off the board to discard it. Verify the module samples have consistent scale on desktop and X/A/O/U letters appear on placed pieces. Check Undo, Save, JSON export/import, and restored labels. In Play, open the Moves flyout, make legal moves, and verify the count/history and Replay. Switch to Build to restore the original layout.
@@ -145,7 +159,7 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v18`.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v19`.
 - The root game menu links to `play.html`. Every saved puzzle is listed; there is no publication or curation flag.
 - Firestore rules allow SL/CJ puzzle saves and SL/CJ deletion. Player completions use private per-account records. Workshop preview does not record completions.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.

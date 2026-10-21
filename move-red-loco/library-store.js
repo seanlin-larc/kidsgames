@@ -7,7 +7,7 @@ const conflict = () => Object.assign(new Error("This puzzle changed on another d
 export function createLibraryStore(adapter) {
   async function player(permission = "read") {
     const p = await adapter.player();
-    if (!p || (permission !== "read" && !(["save", "delete"].includes(permission) ? ["SL", "CJ"].includes(p.code) : p.code === "SL"))) throw Object.assign(new Error(["save", "delete"].includes(permission) ? "Only SL or CJ can save, rename, or delete library puzzles." : "Only SL can change the puzzle library."),{code:"permission-denied"});
+    if (!p || (permission !== "read" && !["SL", "CJ"].includes(p.code))) throw Object.assign(new Error("Only SL or CJ can change the puzzle library."),{code:"permission-denied"});
     return p;
   }
   function content(title, layout) {

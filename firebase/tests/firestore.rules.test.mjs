@@ -114,14 +114,16 @@ test('create rejects forged metadata, unsupported shape, and invalid document id
   await assertSucceeds(setDoc(ref(db, 'x'.repeat(64)), data()));
 });
 
-test('200-document SL restore transaction fits the security-rule access budget', async () => {
-  const db = dbFor('sean');
-  await assertSucceeds(runTransaction(db, async tx => {
-    const refs = Array.from({ length: 200 }, (_, i) => ref(db, `puzzle-${i}`));
-    for (const r of refs) await tx.get(r);
-    for (const r of refs) tx.set(r, data());
-  }));
-  assert.equal((await getDocs(collection(db, 'puzzleLibrary'))).size, 200);
+test('200-document SL and CJ import transactions fit the security-rule access budget', async () => {
+  for (const uid of ['sean','child']) {
+    const db = dbFor(uid);
+    await assertSucceeds(runTransaction(db, async tx => {
+      const refs = Array.from({ length: 200 }, (_, i) => ref(db, `${uid}-puzzle-${i}`));
+      for (const r of refs) await tx.get(r);
+      for (const r of refs) tx.set(r, data({createdBy:uid,updatedBy:uid}));
+    }));
+  }
+  assert.equal((await getDocs(collection(dbFor('sean'), 'puzzleLibrary'))).size, 400);
 });
 
 test('existing player mapping is immutable from browsers', async () => {

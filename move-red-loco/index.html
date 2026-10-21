@@ -79,7 +79,7 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
 .action:hover:not(:disabled){background:var(--hover)}
 .action.primary{background:var(--accent);border-color:var(--accent-border);color:#fff}
 .action.primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.14)}
-#saveBox{position:relative;min-width:0;z-index:12}
+#saveBox{position:relative;min-width:0;z-index:12;grid-column:1/-1}
 #save{width:100%}
 .save-menu{position:absolute;top:calc(100% + 4px);left:0;min-width:190px;display:flex;flex-direction:column;
   gap:2px;padding:6px;background:var(--surface);border:1px solid var(--border);
@@ -89,12 +89,13 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
 #modeToggle{display:flex;min-height:42px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
 #modeToggle button{flex:1;min-width:0;background:var(--surface2);border:0;font-weight:800;font-size:13px}
 #modeToggle button[aria-pressed="true"]{background:var(--active);color:var(--active-text)}
-.test-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;align-items:center}
-#test,#replay{min-width:0}
-#replay{display:none}
-.sheet[data-mode="play"] #replay{display:block}
-#testResult{grid-column:1/-1;text-align:center;font-size:20px;font-weight:850;color:var(--text);
-  font-variant-numeric:tabular-nums;min-height:28px}
+.play-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;align-items:center}
+#moveCount{grid-column:1/-1;text-align:center;color:var(--ok);font-size:18px;font-weight:800}
+.extras.layout-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.layout-actions button{min-height:38px;min-width:0}
+#testResult{grid-column:1/-1;min-height:38px;border:1px solid var(--border);border-radius:6px;
+ display:flex;align-items:center;justify-content:center;text-align:center;padding:6px;
+ font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
 #testResult.ok{color:var(--ok)}
 #testResult.bad{color:var(--bad)}
 #testResult.busy{color:var(--active)}
@@ -154,7 +155,7 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
 .palette-card .sample.vertical{width:31%;height:39px}
 .palette-card .sample.square{width:37%;height:38px}
 .palette-card .name{color:var(--text);font-weight:750;font-size:11px;line-height:1.2}
-.palette-card .dimension{color:var(--muted);font-size:9px}
+.palette-card .dimension,.palette-card .remaining{color:var(--muted);font-size:9px}
 .details{background:var(--surface2);border:1px solid var(--border);border-radius:9px;
   padding:8px;display:flex;flex-direction:column;gap:7px}
 .details p{font-size:11px;color:var(--muted);margin:0;line-height:1.35}
@@ -183,13 +184,25 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
 .notice-card p{margin:0 0 20px;font-size:17px;line-height:1.5;white-space:pre-line}
 .notice-card button{min-width:96px}
 .library-name{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
-.library-name input,.library-select{font:inherit;background:var(--surface2);color:var(--text);
+.library-name input{font:inherit;background:var(--surface2);color:var(--text);
   border:1px solid var(--border);border-radius:6px;padding:8px;min-width:0;width:100%}
-.library-select{min-height:150px;margin:0 0 14px;text-align:left}
 #manageLibraryCard{width:min(1000px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:20px;text-align:left;border-radius:16px}
-#manageLibraryCard h2{font-size:22px}
+#manageLibraryCard[open]{display:flex;flex-direction:column;overflow:hidden}
+#manageLibraryCard h2{font-size:22px;margin:0}
+.manage-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none}
+#closeManageLibrary{min-width:44px;min-height:44px;font-size:24px;padding:0}
+.library-tools{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;flex:none}
+.library-tools button{flex:1 1 auto}
+#manageLibraryMessage{flex:none}
+.puzzle-actions{position:fixed;inset:auto;margin:0;padding:5px;width:150px;max-width:calc(100vw - 16px);
+ background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:9px;box-shadow:0 8px 24px #0006}
+.puzzle-actions button{display:block;width:100%;min-height:44px;text-align:left;padding:8px 12px;
+ border:0;border-radius:5px;background:transparent;font-size:14px}
+.puzzle-actions button:hover,.puzzle-actions button:focus-visible{background:var(--hover)}
+.puzzle-actions [data-library-action="delete"]{color:var(--bad)}
+#importPreview{max-height:35dvh;overflow-y:auto;text-align:left;padding-left:24px;font-size:14px;overflow-wrap:anywhere}
 #manageLibraryCard > p{font-size:15px;color:var(--muted);margin-bottom:16px}
-.manage-list{padding:4px;margin:0;max-height:60dvh;overflow-y:auto;text-align:left;overscroll-behavior:contain}
+.manage-list{padding:4px;margin:0;flex:1;min-height:0;overflow-y:auto;text-align:left;overscroll-behavior:contain}
 .manage-tier{margin:0 0 24px}
 .manage-tier:last-child{margin-bottom:0}
 .manage-tier h3{margin:0 0 10px;font-size:18px}
@@ -200,9 +213,7 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
 .manage-entry strong,.manage-entry small{display:block}
 .manage-entry small{margin-top:4px;color:var(--muted);font-size:12px}
 .manage-actions{display:flex;gap:6px;flex:none}
-.notice-card .library-delete,.notice-card .library-rename{min-width:44px;min-height:44px;flex:none;font-size:24px;padding:0;border-radius:10px}
-.notice-card .library-delete{color:var(--bad)}
-#manageLibraryCard .dialog-actions{justify-content:flex-end}
+.notice-card .library-menu{min-width:44px;min-height:44px;flex:none;font-size:24px;padding:0;border-radius:10px}
 #manageLibrary,#manageLibraryCard button{-webkit-tap-highlight-color:transparent}
 @media(max-width:600px){
  #manageLibraryCard{padding:16px}
@@ -213,7 +224,6 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
 .dialog-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:16px}
 .restore-choice{display:flex;align-items:center;gap:8px;text-align:left;font-size:14px}
 .restore-choice input{width:20px;height:20px;flex:none}
-#libraryTools{display:flex;flex-wrap:wrap;gap:6px}
 #librarySetup{font-size:11px;line-height:1.4;color:var(--muted);margin:0}
 @media(max-width:980px){
  .workspace{grid-template-columns:minmax(0,1fr) minmax(205px,250px);gap:10px}
@@ -222,8 +232,6 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
  .left-panel .hint-line{display:none}
  .board-stage{grid-column:1;grid-row:2;max-width:min(100%,calc(100dvh - 230px))}
  .right-panel{grid-column:2;grid-row:2}
- .test-row{grid-template-columns:1fr 1fr}
- #testResult{grid-column:1/-1}
 }
 @media(max-width:600px){
  .topline small{display:none}
@@ -236,7 +244,7 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
  .workspace{display:flex;flex-direction:column;gap:9px}
  .left-panel{display:grid;grid-template-columns:1fr 1fr}
  .edit-actions{grid-column:1/-1}
- .left-panel #modeToggle,.left-panel .test-row{grid-column:auto}
+ .left-panel #modeToggle,.left-panel .play-actions{grid-column:auto}
  .left-panel #playInfo{grid-column:1/-1}
  .board-stage{width:min(100%,calc(100dvh - 175px));max-width:none;align-self:center}
  .right-panel{width:100%;min-height:0}
@@ -272,14 +280,14 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
  .sheet{gap:7px}
  .workspace{display:flex;flex-direction:column;gap:8px;position:relative}
  .left-panel{display:contents}
- .edit-actions{order:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+ .edit-actions{order:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
  .edit-actions .action{font-size:11px;min-height:36px;padding:4px}
- #saveBox{align-self:stretch}
+ #saveBox{align-self:stretch;grid-column:auto}
  .board-stage{order:1;width:min(calc(100vw - 14px),calc(100dvh - 285px));max-width:none;align-self:center;padding-right:28px}
  .exit-gate{width:28px}
  #modeToggle{order:2;min-height:39px}
- .test-row{order:3;display:grid;grid-template-columns:1fr 1fr auto;gap:8px}
- #testResult{grid-column:3;min-width:66px;font-size:18px}
+ .play-actions{order:3;grid-template-columns:1fr 1fr auto;gap:8px}
+ #moveCount{grid-column:3;font-size:16px}
  #playInfo{display:none}
  .hint-line{order:5;display:block;font-size:11px;padding:0 5px}
  .right-panel{order:4;display:flex;width:100%;padding:6px;border-radius:8px;
@@ -332,7 +340,6 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
       <input id="puzzleTitle" type="text" maxlength="80" value="Untitled puzzle" autocomplete="off">
     </label>
     <div class="edit-actions">
-     <button id="reset" class="action" type="button">Reset</button>
      <button id="undo" class="action" type="button">Undo</button>
      <button id="redo" class="action" type="button">Redo</button>
      <div id="saveBox">
@@ -351,10 +358,10 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
      <button id="buildMode" type="button" aria-pressed="true">Build</button>
      <button id="playMode" type="button" aria-pressed="false">Play</button>
     </div>
-    <div class="test-row">
+    <div class="play-actions" hidden>
      <button id="replay" class="action" type="button" disabled title="Replay the moves you made">Replay</button>
-     <button id="test" class="action primary" type="button">Test</button>
-     <output id="testResult" aria-live="polite" title="Fewest sliding moves to clear the exit path">—</output>
+     <button id="showMoves" class="action" type="button">Moves</button>
+     <output id="moveCount" aria-live="polite">0 moves</output>
     </div>
     <output id="playInfo" aria-live="polite">Build mode</output>
     <div class="hint-line">Build: drag a block onto the board. On a portrait phone, long-press an empty cell to choose a block; drag it off the board to remove.</div>
@@ -390,22 +397,22 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
      <div class="tray-subtitle">Drag a block onto the board. Pieces share one grid-cell scale.</div>
      <div class="palette-grid">
   <div class="palette-card red" id="item-red" role="button" tabindex="0" data-template="red" aria-label="Add red locomotive, 2 by 1">
-    <div class="sample">RED</div><div class="name">Red locomotive</div><div class="dimension">2 × 1 · Horizontal</div>
+    <div class="sample">RED</div><div class="name">Red locomotive</div><div class="dimension">2 × 1 · Horizontal</div><div class="remaining" aria-live="polite"></div>
   </div>
   <div class="palette-card blue" id="item-h2" role="button" tabindex="0" data-template="h2" aria-label="Add short horizontal train, 2 by 1">
-    <div class="sample">H2</div><div class="name">Short train</div><div class="dimension">2 × 1 · Horizontal</div>
+    <div class="sample">H2</div><div class="name">Short train</div><div class="dimension">2 × 1 · Horizontal</div><div class="remaining" aria-live="polite"></div>
   </div>
   <div class="palette-card green" id="item-v2" role="button" tabindex="0" data-template="v2" aria-label="Add short vertical train, 1 by 2">
-    <div class="sample vertical">V2</div><div class="name">Vertical train</div><div class="dimension">1 × 2 · Vertical</div>
+    <div class="sample vertical">V2</div><div class="name">Vertical train</div><div class="dimension">1 × 2 · Vertical</div><div class="remaining" aria-live="polite"></div>
   </div>
   <div class="palette-card gold" id="item-h3" role="button" tabindex="0" data-template="h3" aria-label="Add long horizontal train, 3 by 1">
-    <div class="sample">H3</div><div class="name">Long train</div><div class="dimension">3 × 1 · Horizontal</div>
+    <div class="sample">H3</div><div class="name">Long train</div><div class="dimension">3 × 1 · Horizontal</div><div class="remaining" aria-live="polite"></div>
   </div>
   <div class="palette-card purple" id="item-v3" role="button" tabindex="0" data-template="v3" aria-label="Add long vertical train, 1 by 3">
-    <div class="sample vertical">V3</div><div class="name">Tall train</div><div class="dimension">1 × 3 · Vertical</div>
+    <div class="sample vertical">V3</div><div class="name">Tall train</div><div class="dimension">1 × 3 · Vertical</div><div class="remaining" aria-live="polite"></div>
   </div>
   <div class="palette-card slate" id="item-platform" role="button" tabindex="0" data-template="platform" aria-label="Add square platform, 2 by 2">
-    <div class="sample square">P</div><div class="name">Platform</div><div class="dimension">2 × 2 · Both axes</div>
+    <div class="sample square">P</div><div class="name">Platform</div><div class="dimension">2 × 2 · Both axes</div><div class="remaining" aria-live="polite"></div>
   </div>
 
      </div>
@@ -418,17 +425,13 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
     </div>
   </div>
 
-  <div class="extras">
-    <button type="button" id="export">Export JSON</button>
-    <button type="button" id="import">Import JSON</button>
+  <div class="layout-actions extras">
+    <button id="newPuzzle" type="button">New/Reset</button>
+    <button id="test" type="button">Test Layout</button>
+    <output id="testResult" aria-live="polite" aria-label="Layout test result"></output>
+    <button type="button" id="export">Export Layout</button>
+    <button type="button" id="import">Import Layout</button>
     <input id="importFile" type="file" accept=".json,application/json" hidden>
-  </div>
-  <div id="libraryTools" class="extras" hidden>
-    <button id="openLibrary" type="button">Open library</button>
-    <button id="newPuzzle" type="button">New puzzle</button>
-    <button id="downloadArchive" type="button">Download archive</button>
-    <button id="restoreArchive" type="button">Restore archive</button>
-    <input id="archiveFile" type="file" accept=".json,application/json" hidden>
   </div>
   <p id="librarySetup">The cloud library is not available yet. Save keeps a device draft.</p>
 
@@ -447,30 +450,31 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
   <p id="noticeMessage"></p>
   <button id="closeNotice" class="action primary" type="button" autofocus>OK</button>
 </dialog>
-<dialog id="libraryCard" class="notice-card" aria-labelledby="libraryTitle">
-  <h2 id="libraryTitle">Family puzzles</h2>
-  <p id="libraryMessage"></p>
-  <select id="librarySelect" class="library-select" size="6" aria-label="Saved puzzles"></select>
-  <div class="dialog-actions">
-    <button id="closeLibrary" class="action" type="button">Cancel</button>
-    <button id="loadPuzzle" class="action primary" type="button">Open puzzle</button>
-  </div>
-</dialog>
 <dialog id="manageLibraryCard" class="notice-card" aria-labelledby="manageLibraryTitle" aria-describedby="manageLibraryMessage">
-  <h2 id="manageLibraryTitle">Manage library</h2>
-  <p id="manageLibraryMessage" role="status" aria-live="polite"></p>
-  <div id="manageLibraryList" class="manage-list" role="group" aria-label="Puzzles grouped by difficulty"></div>
-  <div class="dialog-actions">
-    <button id="closeManageLibrary" class="action" type="button" autofocus>Done</button>
+  <div class="manage-heading">
+    <h2 id="manageLibraryTitle">Manage library</h2>
+    <button id="closeManageLibrary" class="action" type="button" aria-label="Close Manage library" autofocus>×</button>
   </div>
+  <div class="library-tools">
+    <button id="downloadArchive" class="action" type="button">Export Full Library</button>
+    <button id="restoreArchive" class="action" type="button">Import into Library</button>
+    <input id="archiveFile" type="file" accept=".json,application/json" hidden>
+  </div>
+  <p id="manageLibraryMessage" role="status" aria-live="polite"></p>
+  <div id="manageLibraryList" class="manage-list" role="region" aria-label="Puzzles grouped by difficulty" tabindex="0"></div>
+<div id="puzzleActions" class="puzzle-actions" popover="auto" role="menu" aria-label="Puzzle actions">
+  <button type="button" role="menuitem" data-library-action="edit">Edit</button>
+  <button type="button" role="menuitem" data-library-action="rename">Rename</button>
+  <button type="button" role="menuitem" data-library-action="delete">Delete</button>
+</div>
 </dialog>
 <dialog id="restoreCard" class="notice-card" aria-labelledby="restoreTitle" aria-describedby="restoreSummary">
-  <h2 id="restoreTitle">Restore puzzle archive</h2>
+  <h2 id="restoreTitle">Import into Library</h2>
   <p id="restoreSummary"></p>
-  <label class="restore-choice"><input id="overwriteExisting" type="checkbox">Replace puzzles with matching IDs</label>
+  <ul id="importPreview" aria-label="Puzzles to add"></ul>
   <div class="dialog-actions">
     <button id="cancelRestore" class="action" type="button">Cancel</button>
-    <button id="confirmRestore" class="action primary" type="button">Restore</button>
+    <button id="confirmRestore" class="action primary" type="button">Import puzzles</button>
   </div>
 </dialog>
 <script type="module" src="./editor.js"></script>

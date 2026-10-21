@@ -66,3 +66,26 @@ export function planRestore(archive, current, overwrite = false) {
   }
   return {entries,skipped};
 }
+
+// Import adds copies only. IDs from a file never authorize replacing saved puzzles.
+// Accept our single-layout export, a library puzzle, an archive, or an array of puzzles.
+export function planLibraryImport(value, createId = () => crypto.randomUUID(), now = new Date().toISOString()) {
+  if (new TextEncoder().encode(JSON.stringify(value)).length > MAX_ARCHIVE_BYTES) throw Error("Import exceeds 2 MB.");
+  const records = value?.format === ARCHIVE_FORMAT ? normalizeArchive(value).puzzles :
+    Array.isArray(value) ? value : [value];
+  if (!records.length || records.length > MAX_ARCHIVE_PUZZLES) throw Error("Import between 1 and 200 puzzles.");
+  const puzzles = records.map(record => {
+    if (record?.format === PUZZLE_FORMAT) return normalizeLibraryPuzzle(record);
+    if (record?.format !== FORMAT) throw Error("Not a supported puzzle file or archive.");
+    return normalizeLibraryPuzzle({...record,id:"import-validation",format:PUZZLE_FORMAT,
+      title:record.title ?? "Imported puzzle",revision:1,createdAt:now,updatedAt:now});
+  });
+  const ids = new Set();
+  const entries = puzzles.map(puzzle => {
+    const id = createId();
+    if (!validPuzzleId(id) || ids.has(id)) throw Error("Could not allocate unique puzzle IDs. Try importing again.");
+    ids.add(id);
+    return {puzzle:{...puzzle,id,revision:1,createdAt:now,updatedAt:now},expectedRevision:0};
+  });
+  return {entries,skipped:[]};
+}

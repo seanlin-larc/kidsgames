@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {makeArchive,normalizeArchive,normalizeLibraryPuzzle,planRestore,PUZZLE_FORMAT,MAX_ARCHIVE_PUZZLES} from "../library-data.js";
+import {makeArchive,normalizeArchive,normalizeLibraryPuzzle,planRestore,planLibraryImport,PUZZLE_FORMAT,MAX_ARCHIVE_PUZZLES} from "../library-data.js";
 import {createLibraryStore} from "../library-store.js";
 
 const when="2026-10-18T00:00:00.000Z";
@@ -202,7 +202,7 @@ test("interrupted deletion retains every puzzle",async()=>{
   assert.equal(s.docs.size,2);assert.equal(s.writes,0);
 });
 
-test("CJ can create, update and delete puzzles while archive restore remains restricted",async()=>{
+test("CJ can create, update, delete and import puzzles with the same access as SL",async()=>{
   const s=setup([],"CJ");
   await s.store.savePuzzle({id:"puzzle-1",title:"CJ puzzle",layout:layout(puzzle())});
   assert.equal(s.docs.get("puzzle-1").createdBy,"uid-CJ");
@@ -212,5 +212,38 @@ test("CJ can create, update and delete puzzles while archive restore remains res
   await assert.rejects(s.store.deletePuzzle({id:"puzzle-1",expectedRevision:1}),/changed or was deleted/);
   await s.store.deletePuzzle({id:"puzzle-1",expectedRevision:2});
   assert.equal(s.docs.has("puzzle-1"),false);
-  await assert.rejects(s.store.restorePuzzles(planRestore(makeArchive([puzzle()],when),[])),/Only SL/);
+  await s.store.restorePuzzles(planRestore(makeArchive([puzzle()],when),[]));
+  assert.equal(s.docs.get("puzzle-1").createdBy,"uid-CJ");
+});
+
+test("library import accepts layout, library record, array and archive as fresh copies",()=>{
+  for(const input of [layout(puzzle()),puzzle(),[puzzle(),layout(puzzle("puzzle-2"))],makeArchive([puzzle()],when)]) {
+    let index=0;
+    const before=structuredClone(input);
+    const plan=planLibraryImport(input,()=>"copy-"+(++index),when);
+    assert.equal(plan.entries.length,Array.isArray(input)?2:1);
+    for(const [i,entry] of plan.entries.entries()) {
+      assert.equal(entry.expectedRevision,0);assert.equal(entry.puzzle.id,"copy-"+(i+1));
+      assert.deepEqual(entry.puzzle.pieces,puzzle().pieces);
+      assert.equal(entry.puzzle.revision,1);assert.equal(entry.puzzle.createdAt,when);
+    }
+    assert.deepEqual(input,before);
+  }
+});
+test("copy import never overwrites originals and commits all copies atomically",async()=>{
+  const s=setup([puzzle()],"CJ"),before=structuredClone(s.docs.get("puzzle-1"));
+  let index=0;
+  const plan=planLibraryImport(makeArchive([puzzle(),puzzle("puzzle-2")],when),()=>"copy-"+(++index),when);
+  await s.store.restorePuzzles(plan);
+  assert.equal(s.docs.size,3);assert.deepEqual(s.docs.get("puzzle-1"),before);
+  assert.equal(s.docs.get("copy-1").createdBy,"uid-CJ");
+  await assert.rejects(s.store.restorePuzzles(plan),/another device/);
+  assert.equal(s.docs.size,3);
+});
+test("library import validates all entries, limits, and generated IDs",()=>{
+  for(const input of [null,{},[],Array(201).fill(puzzle()),[puzzle(),{...layout(puzzle()),pieces:[null]}],
+    {...puzzle(),label:"z",title:""}]) assert.throws(()=>planLibraryImport(input,()=>"new-id",when));
+  assert.throws(()=>planLibraryImport([puzzle(),puzzle()],()=>"same-id",when),/unique/);
+  assert.throws(()=>planLibraryImport(puzzle(),()=>"Bad ID",when),/unique/);
+  assert.throws(()=>planLibraryImport({extra:"x".repeat(2_000_001)},()=>"new-id",when),/2 MB/);
 });

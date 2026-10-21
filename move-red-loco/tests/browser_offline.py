@@ -15,11 +15,11 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(ORIGIN + "/")
     page.evaluate("navigator.serviceWorker.ready.then(()=>navigator.serviceWorker.controller || new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true})))")
-    cache_name = page.evaluate("caches.keys().then(names=>names.find(name=>name==='kidsgames-v18'))")
-    assert cache_name == "kidsgames-v18"
+    cache_name = page.evaluate("caches.keys().then(names=>names.find(name=>name==='kidsgames-v19'))")
+    assert cache_name == "kidsgames-v19"
     paths = ["play.html", "player.css", "player.js", "player-state.js", "progress-store.js", "player-firestore.js"]
     for path in paths:
-        assert page.evaluate("async path=>!!(await (await caches.open('kidsgames-v18')).match('/move-red-loco/'+path))", path), path
+        assert page.evaluate("async path=>!!(await (await caches.open('kidsgames-v19')).match('/move-red-loco/'+path))", path), path
     now = int(time.time() * 1000)
     puzzle = dict(id="offline-puzzle", title="Offline puzzle", format="move-red-loco-puzzle-v1",
                   difficulty="Beginner", pieces=[RED, BLOCKER], exitRow=2, revision=1,
@@ -28,7 +28,7 @@ with sync_playwright() as playwright:
       localStorage.setItem('kg-checkout',JSON.stringify(data.checkout));
       localStorage.setItem('mrl-library-v1:offline-test',JSON.stringify([data.puzzle]));
       // Simulate unavailable Firebase inside this disposable browser cache only.
-      const cache=await caches.open('kidsgames-v18');
+      const cache=await caches.open('kidsgames-v19');
       await cache.put('/shared/family.js',new Response("throw Error('Firebase unavailable in offline test');",{headers:{'Content-Type':'text/javascript'}}));
     }""", dict(checkout=dict(uid="offline-test", code="CJ", start=now, until=now + 48 * 3600 * 1000, seen=now), puzzle=puzzle))
     context.set_offline(True)

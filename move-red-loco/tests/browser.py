@@ -62,6 +62,7 @@ if (!sessionStorage.getItem('seeded')) {{
 }}
 """)
     page = context.new_page()
+    page.on("dialog", lambda dialog: dialog.accept())
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(ORIGIN + "/move-red-loco/")
@@ -93,8 +94,8 @@ def run_checks():
         destination = ARTIFACTS / downloaded.value.suggested_filename
         downloaded.value.save_as(destination)
         exported = json.loads(destination.read_text())
-        assert exported == {k: saved[k] for k in ["format", "difficulty", "exitRow", "pieces"]}
-        assert set(exported) == {"format", "difficulty", "exitRow", "pieces"}
+        assert exported == {**{k: saved[k] for k in ["format", "difficulty", "exitRow", "pieces"]},"title":"Untitled puzzle"}
+        assert set(exported) == {"format", "difficulty", "exitRow", "pieces", "title"}
         page.reload()
         expect(page.locator("#status")).to_contain_text("Restored")
         assert page.locator("#board .piece").count() == 2
@@ -109,11 +110,11 @@ def run_checks():
 
         # Actual worker goal matches Play: one blocker slide, no added exit move.
         page.locator("#test").click()
-        expect(page.locator("#testResult")).to_have_text("1 steps")
+        expect(page.locator("#testResult")).to_have_text("Solvable — 1 moves")
         page.locator("#playMode").click()
         page.locator('[data-piece-id="red"]').click()
         page.keyboard.press("ArrowUp")  # Illegal axis; no count or completion.
-        expect(page.locator("#testResult")).to_have_text("0")
+        expect(page.locator("#moveCount")).to_have_text("0 moves")
         block = page.locator('[data-piece-id="v2-1"]').bounding_box()
         size = page.locator("#board").bounding_box()["width"] / 7
         x, y = block["x"] + block["width"] / 2, block["y"] + block["height"] / 2
@@ -132,7 +133,7 @@ def run_checks():
         expect(page.locator("#status")).to_contain_text("Replay finished")
         expect(page.locator("#playInfo")).to_have_text("Solved!")
         expect(page.locator("#noticeCard")).not_to_be_visible()
-        expect(page.locator("#testResult")).to_have_text("1")
+        expect(page.locator("#moveCount")).to_have_text("1 moves")
         page.locator("#buildMode").click()
         assert page.locator('[data-piece-id="v2-1"]').evaluate("el=>el.style.top") == "14.2857%"
         page.screenshot(path=str(ARTIFACTS / "builder-desktop.png"))
@@ -156,7 +157,7 @@ def run_checks():
             original = storage(page)
             for selector in ["#save", '[data-save-tier="Freak"]', "#export"]:
                 page.locator(selector).dispatch_event("click")
-                expect(page.locator("#noticeMessage")).to_have_text("Only SL can export or restore puzzle files." if selector == "#export" else "Only SL or CJ can save a puzzle layout.")
+                expect(page.locator("#noticeMessage")).to_have_text("Only SL or CJ can export or import puzzle files." if selector == "#export" else "Only SL or CJ can save a puzzle layout.")
                 page.locator("#closeNotice").click()
                 assert storage(page) == original
             assert not errors, errors

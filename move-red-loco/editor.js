@@ -3,7 +3,7 @@ import { attemptSlide, attemptExit } from "./play-rules.js";
 import { enterGame } from "../shared/gate.js";
 import { TEMPLATES, TIERS, normalizePuzzleData, nextPieceId, validBlockHue, writeDraft } from "./puzzle-data.js";
 import { LIBRARY_ENABLED } from "./library-config.js";
-import { makeArchive, normalizeArchive, normalizeLibraryPuzzle, planRestore, validPuzzleId, MAX_ARCHIVE_BYTES } from "./library-data.js";
+import { makeArchive, normalizeLibraryPuzzle, planLibraryImport, validPuzzleId, MAX_ARCHIVE_BYTES } from "./library-data.js";
 
 // Device-wide appearance preference; independent of puzzle save and current player.
 // Auto follows the OS theme immediately and reacts to subsequent OS changes.
@@ -125,7 +125,7 @@ let pieces = [], nextId = 1, difficulty = "Starter", exitRow = 2; // Upper exit 
 let selectedTemplate = null, selectedHue = null, selectedId = null, undoStack = [], redoStack = [];
 let pointerDrag = null, dragPreview = null, worker = null, testRequest = 0;
 let storageKey = null, playerContext = null;
-let libraryId = null, libraryRevision = 0, libraryBusy = false, libraryEntries = [], restoreArchive = null;
+let libraryId = null, libraryRevision = 0, libraryBusy = false, libraryEntries = [], importPlan = null;
 const knownLibraryRevisions = new Map();
 let mode = "build", playStart = null, playMoves = 0, playWon = false;
 let playHistory = [], replaying = false, replayGeneration = 0;
@@ -165,7 +165,7 @@ function modified(message) { invalidateTest(); render(); status(message + " · U
 function invalidateTest() {
   testRequest++;
   if (worker) { worker.terminate(); worker = null; }
-  $("testResult").textContent = "—";
+  $("testResult").textContent = "";
   $("testResult").className = "";
   $("test").disabled = false;
   clearHover();
@@ -444,15 +444,18 @@ function render() {
   $("playMode").setAttribute("aria-pressed", String(mode === "play"));
   $("playInfo").textContent = mode === "build" ? "Build mode" : replaying ? "Replaying…" : playWon ? "Solved!" : "Playing";
   $("replay").disabled = mode !== "play" || replaying || playHistory.length === 0;
-  $("test").textContent = mode === "play" ? "Moves" : "Test";
+  document.querySelector(".play-actions").hidden = mode !== "play";
   if (mode === "play") {
-    $("testResult").textContent = String(playMoves);
-    $("testResult").className = "ok";
+    $("moveCount").textContent = playMoves + " moves";
   }
   renderMoveLog();
   document.querySelectorAll(".palette-card").forEach(el => {
     el.setAttribute("aria-disabled", String(mode === "play"));
     el.tabIndex = mode === "play" ? -1 : 0;
+    const type = el.dataset.template, group = labelGroup(type);
+    const total = LABEL_GROUPS[type].length;
+    const remaining = Math.max(0,total-pieces.filter(p=>labelGroup(p.type)===group).length);
+    el.querySelector(".remaining").textContent = remaining + "/" + total + " Remaining";
   });
   document.querySelectorAll(".exit-gate").forEach(el => {
     const active = Number(el.dataset.exitRow) === exitRow;
@@ -460,25 +463,23 @@ function render() {
     el.querySelector(".arrow").textContent = active ? "→" : "×";
     el.title = active ? "Active exit" : "Select " + (Number(el.dataset.exitRow) === 2 ? "upper" : "lower") + " exit";
   });
-  $("reset").disabled = libraryBusy || mode === "play";
   $("undo").disabled = libraryBusy || mode === "play" || !undoStack.length;
   $("redo").disabled = libraryBusy || mode === "play" || !redoStack.length;
   $("save").disabled = libraryBusy || mode === "play";
   $("test").disabled = mode === "build" && !!worker;
   document.querySelectorAll("#saveMenu button,.extras button,.details button").forEach(el => {
     el.disabled = libraryBusy || mode === "play" || (el.id === "remove" && !selectedId) ||
+      (el.id === "test" && !!worker) ||
       (el.id === "rotate" && (!selectedId || ["red","platform"].includes(byId(selectedId)?.type))) ||
       (el.id === "clearSelection" && !selectedId && !selectedTemplate);
   });
-  $("libraryTools").hidden = !LIBRARY_ENABLED;
   $("puzzleNameLabel").hidden = !LIBRARY_ENABLED;
   $("librarySetup").hidden = LIBRARY_ENABLED;
   $("manageLibrary").hidden = !LIBRARY_ENABLED || !["SL", "CJ"].includes(playerContext?.player.code) || mode !== "build";
   $("manageLibrary").disabled = libraryBusy;
-  document.querySelectorAll("#manageLibraryCard button").forEach(el=>el.disabled=libraryBusy);
+  document.querySelectorAll("#manageLibraryCard button,#restoreCard button").forEach(el=>el.disabled=libraryBusy);
   $("puzzleTitle").disabled = libraryBusy || mode === "play";
   $("buildMode").disabled = libraryBusy; $("playMode").disabled = libraryBusy;
-  document.querySelectorAll("#libraryTools button").forEach(el=>el.disabled=libraryBusy||mode!=="build");
   document.querySelectorAll(".exit-gate").forEach(el => {
     el.disabled = libraryBusy || (mode === "play" && Number(el.dataset.exitRow) !== exitRow);
     el.setAttribute("aria-label", mode === "play" ?
@@ -785,20 +786,13 @@ document.querySelectorAll(".exit-gate").forEach(btn=>btn.addEventListener("click
   exitRow = row;
   modified("Selected the " + (row === 2 ? "upper" : "lower") + " exit" + (red ? "; X moved into alignment" : ""));
 }));
-$("reset").addEventListener("click",()=>{
-  if (mode !== "build" || libraryBusy || !pieces.length) return;
-  if (!confirm("Remove every module from this puzzle? You can still Undo.")) return;
-  recordEdit(); pieces=[]; selectedId=null; selectedTemplate=null;
-  libraryId=null; libraryRevision=0; $("puzzleTitle").value="Untitled puzzle";
-  modified("Cleared the board");
-});
 $("undo").addEventListener("click",undo);
 $("redo").addEventListener("click",redo);
 $("rotate").addEventListener("click",rotateSelected);
 $("remove").addEventListener("click",removeSelected);
 $("clearSelection").addEventListener("click",()=>{ if(mode!=="build")return; selectedId=null; selectedTemplate=null; render();status("Selection cleared."); });
 document.addEventListener("keydown", e=>{
-  if ($("noticeCard").open || $("libraryCard").open || $("manageLibraryCard").open || $("restoreCard").open || libraryBusy) return;
+  if ($("noticeCard").open || $("manageLibraryCard").open || $("restoreCard").open || libraryBusy) return;
   const tag = e.target?.tagName;
   if (["INPUT","TEXTAREA","SELECT"].includes(tag)) return;
   if (e.key === "Escape" && !$("saveMenu").hidden) { closeSaveMenu(); e.preventDefault(); return; }
@@ -825,7 +819,7 @@ document.addEventListener("keydown", e=>{
   }
 });
 
-$("test").addEventListener("click",()=>{
+$("showMoves").addEventListener("click",()=>{
   if (mode === "play") {
     if (portraitPhone()) {
       const sheet = document.querySelector(".sheet");
@@ -837,17 +831,19 @@ $("test").addEventListener("click",()=>{
     if (!portraitPhone()) log.focus({ preventScroll:true });
     return;
   }
-  if (mode !== "build") return;
+});
+$("test").addEventListener("click",()=>{
+  if (mode !== "build" || libraryBusy) return;
   const errors = validatePuzzle(pieces, exitRow);
   if (errors.length) {
-    $("testResult").textContent = "!";
+    $("testResult").textContent = "Invalid layout";
     $("testResult").className = "bad";
     status("Cannot test: " + errors.join(" "));
     return;
   }
   invalidateTest();
   const id = ++testRequest;
-  $("testResult").textContent = "…";
+  $("testResult").textContent = "Searching…";
   $("testResult").className = "busy";
   $("test").disabled = true;
   status("Searching for the shortest solution. Each slide counts as one move.");
@@ -861,19 +857,19 @@ $("test").addEventListener("click",()=>{
     const result = event.data.result;
     worker?.terminate(); worker=null; $("test").disabled=false;
     if (result.status==="solved") {
-      $("testResult").textContent = result.steps + " steps";
+      $("testResult").textContent = "Solvable — " + result.steps + " moves";
       $("testResult").className = "ok";
       status("Solvable in " + result.steps + " moves (optimal). Searched " + result.visited.toLocaleString() + " states.");
     } else if (result.status==="unsolvable") {
-      $("testResult").textContent="X";
+      $("testResult").textContent="Unsolvable";
       $("testResult").className="bad";
       status("Unsolvable: every reachable board state was checked (" + result.visited.toLocaleString() + ").");
     } else if (result.status==="limit") {
-      $("testResult").textContent="?";
+      $("testResult").textContent="Inconclusive";
       $("testResult").className="busy";
       status("Inconclusive. Search reached " + result.maxStates.toLocaleString() + " explored states. This does not prove unsolvability.");
     } else {
-      $("testResult").textContent="!";
+      $("testResult").textContent="Test error";
       $("testResult").className="bad";
       status("Test error: " + (result.message || (result.errors||[]).join("; ")));
     }
@@ -881,7 +877,7 @@ $("test").addEventListener("click",()=>{
   worker.onerror = error=>{
     if (id!==testRequest) return;
     worker?.terminate();worker=null;$("test").disabled=false;
-    $("testResult").textContent="!";$("testResult").className="bad";
+    $("testResult").textContent="Test error";$("testResult").className="bad";
     status("Solver could not start: " + error.message);
   };
   worker.postMessage({requestId:id,pieces:clone(pieces),exitRow});
@@ -903,9 +899,9 @@ function showNotice(title, message) {
 }
 $("closeNotice").addEventListener("click", () => $("noticeCard").close());
 function requireCreator(save = false) {
-  if (playerContext?.player.code === "SL" || (save && playerContext?.player.code === "CJ")) return true;
+  if (["SL", "CJ"].includes(playerContext?.player.code)) return true;
   closeSaveMenu();
-  showNotice("Save puzzle layout", save ? "Only SL or CJ can save a puzzle layout." : "Only SL can export or restore puzzle files.");
+  showNotice("Save puzzle layout", save ? "Only SL or CJ can save a puzzle layout." : "Only SL or CJ can export or import puzzle files.");
   return false;
 }
 function closeSaveMenu() {
@@ -958,7 +954,7 @@ document.querySelectorAll("[data-save-tier]").forEach(btn=>btn.addEventListener(
 $("export").addEventListener("click",()=>{
   if (mode !== "build" || !requireCreator()) return;
   try {
-    const data = JSON.stringify(documentData(),null,2)+"\n";
+    const data = JSON.stringify({...documentData(),title:$("puzzleTitle").value.trim() || "Untitled puzzle"},null,2)+"\n";
     const blob = new Blob([data],{type:"application/json"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -976,12 +972,15 @@ $("importFile").addEventListener("change",async event=>{
   if (!file) return;
   try {
     if (file.size > 100000) throw Error("File is too large.");
-    const draft = preparePuzzleData(JSON.parse(await file.text()));
+    const imported = JSON.parse(await file.text());
+    const draft = preparePuzzleData(imported);
+    draft.title = typeof imported.title === "string" && imported.title.trim().length <= 80 ? imported.title.trim() || "Imported puzzle" : "Imported puzzle";
     // File reading is asynchronous. A mode change must not replace a running preview.
     if (mode !== "build" || libraryBusy) return;
+    if (pieces.length && !confirm("Replace the current layout with this imported puzzle? Unsaved changes will be replaced.")) return;
     recordEdit();
     pieces=draft.pieces; difficulty=draft.difficulty; exitRow=draft.exitRow;
-    libraryId=null; libraryRevision=0; $("puzzleTitle").value="Imported puzzle";
+    libraryId=null; libraryRevision=0; $("puzzleTitle").value=typeof draft.title === "string" ? draft.title : "Imported puzzle";
     nextId=nextPieceId(pieces);
     selectedId=null;selectedTemplate=null;selectedHue=null;
     modified("Imported " + pieces.length + " modules");
@@ -1027,25 +1026,61 @@ function downloadJSON(data,name) {
   const anchor=document.createElement("a");anchor.href=url;anchor.download=name;anchor.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-$("openLibrary").addEventListener("click",()=>{
-  if (!LIBRARY_ENABLED || mode!=="build") return;
-  void libraryTask(async()=>{
-    libraryEntries=await readLibrary();
-    const select=$("librarySelect");select.replaceChildren();
-    for (const puzzle of libraryEntries) {
-      const option=document.createElement("option");option.value=puzzle.id;
-      option.textContent=puzzle.title+" · "+puzzle.difficulty;select.appendChild(option);
-    }
-    if (libraryEntries.length) select.selectedIndex=0;
-    $("loadPuzzle").disabled=!libraryEntries.length;
-    $("libraryMessage").textContent=libraryEntries.length ?
-      (online()?"Choose a saved puzzle.":"Offline: choose a puzzle from this device's saved copy.") :
-      (online()?"No puzzles have been saved yet.":"No library copy is available on this device. Connect to load it.");
-    $("libraryCard").showModal();
-  });
+let actionPuzzle=null, actionTrigger=null, actionPosition=null;
+function closePuzzleActions(focus=false) {
+  const trigger=actionTrigger;
+  if ($("puzzleActions").matches(":popover-open")) $("puzzleActions").hidePopover();
+  trigger?.setAttribute("aria-expanded","false");
+  actionPuzzle=null;actionTrigger=null;actionPosition=null;
+  if(focus)trigger?.focus();
+}
+function openPuzzleActions(trigger,puzzle) {
+  if(libraryBusy)return;
+  const wasOpen=actionTrigger===trigger && $("puzzleActions").matches(":popover-open");
+  closePuzzleActions();
+  if(wasOpen)return;
+  actionPuzzle=puzzle;actionTrigger=trigger;
+  const menu=$("puzzleActions");
+  menu.setAttribute("aria-label","Actions for "+puzzle.title);
+  menu.showPopover();trigger.setAttribute("aria-expanded","true");
+  const rect=trigger.getBoundingClientRect();
+  actionPosition={x:rect.x,y:rect.y};
+  const top=rect.bottom+4+menu.offsetHeight<=innerHeight-8 ? rect.bottom+4 : rect.top-menu.offsetHeight-4;
+  menu.style.top=Math.max(8,top)+"px";
+  menu.style.left=Math.max(8,Math.min(innerWidth-menu.offsetWidth-8,rect.right-menu.offsetWidth))+"px";
+  menu.querySelector("button").focus();
+}
+$("puzzleActions").addEventListener("toggle",event=>{
+  // Ignore an earlier close event if another trigger has already reopened the menu.
+  if(event.newState==="closed" && !$("puzzleActions").matches(":popover-open"))closePuzzleActions();
 });
-$("closeLibrary").addEventListener("click",()=>$("libraryCard").close());
+$("puzzleActions").addEventListener("keydown",event=>{
+  const buttons=[...$("puzzleActions").querySelectorAll("button")];
+  const current=buttons.indexOf(document.activeElement);
+  if(event.key==="Escape"){event.preventDefault();closePuzzleActions(true);return;}
+  const next=event.key==="ArrowDown" ? (current+1)%buttons.length :
+    event.key==="ArrowUp" ? (current+buttons.length-1)%buttons.length :
+    event.key==="Home" ? 0 : event.key==="End" ? buttons.length-1 : null;
+  if(next!==null){event.preventDefault();buttons[next].focus();}
+});
+$("puzzleActions").addEventListener("click",event=>{
+  const button=event.target.closest("[data-library-action]");
+  if(!button || !actionPuzzle || libraryBusy)return;
+  const puzzle=actionPuzzle;
+  closePuzzleActions(true);
+  if(button.dataset.libraryAction==="edit")editLibraryPuzzle(puzzle);
+  if(button.dataset.libraryAction==="rename")void renameLibraryPuzzle(puzzle);
+  if(button.dataset.libraryAction==="delete")void deleteLibraryPuzzle(puzzle);
+});
+$("manageLibraryList").addEventListener("scroll",()=>{
+  // A trigger may scroll into view just before opening. Ignore that queued scroll event.
+  const rect=actionTrigger?.getBoundingClientRect();
+  if(rect && actionPosition && (rect.x!==actionPosition.x || rect.y!==actionPosition.y))closePuzzleActions();
+});
+window.addEventListener("resize",()=>closePuzzleActions());
+$("manageLibraryCard").addEventListener("close",()=>closePuzzleActions());
 function renderManagedLibrary(message) {
+  closePuzzleActions();
   const list=$("manageLibraryList");list.replaceChildren();
   for (const [index,tier] of TIERS.entries()) {
     const section=document.createElement("section"), heading=document.createElement("h3");
@@ -1067,20 +1102,18 @@ function renderManagedLibrary(message) {
       details.textContent="Updated "+new Date(puzzle.updatedAt).toLocaleString();
       entry.append(title,details);
       const actions=document.createElement("div");actions.className="manage-actions";
-      const rename=document.createElement("button");
-      rename.type="button";rename.className="action library-rename";rename.textContent="✎";
-      rename.dataset.puzzleId=puzzle.id;rename.setAttribute("aria-label","Rename "+puzzle.title);rename.title="Rename puzzle";
-      rename.addEventListener("click",()=>{void renameLibraryPuzzle(puzzle);});
-      const remove=document.createElement("button");
-      remove.type="button";remove.className="action library-delete";remove.textContent="×";
-      remove.dataset.puzzleId=puzzle.id;remove.setAttribute("aria-label","Delete "+puzzle.title);
-      remove.addEventListener("click",()=>{void deleteLibraryPuzzle(puzzle);});
-      actions.append(rename,remove);row.append(entry,actions);grid.appendChild(row);
+      const menu=document.createElement("button");
+      menu.type="button";menu.className="action library-menu";menu.textContent="⋯";
+      menu.dataset.puzzleId=puzzle.id;menu.setAttribute("aria-label","Actions for "+puzzle.title);
+      menu.setAttribute("aria-haspopup","menu");menu.setAttribute("aria-expanded","false");
+      menu.setAttribute("aria-controls","puzzleActions");
+      menu.addEventListener("click",()=>openPuzzleActions(menu,puzzle));
+      actions.append(menu);row.append(entry,actions);grid.appendChild(row);
     }
     section.appendChild(grid);list.appendChild(section);
   }
   $("manageLibraryMessage").textContent=(message ? message+"\n" : "")+
-    (libraryEntries.length ? "Select ✎ to rename a puzzle, or × to delete it." : "No puzzles have been saved yet.");
+    (libraryEntries.length ? "Select ⋯ beside a puzzle to edit, rename, or delete it." : "No puzzles have been saved yet.");
 }
 async function renameLibraryPuzzle(puzzle) {
   if (libraryBusy || mode!=="build" || !["SL", "CJ"].includes(playerContext?.player.code)) return;
@@ -1107,7 +1140,7 @@ async function renameLibraryPuzzle(puzzle) {
     renderManagedLibrary(message);status(message);
     return true;
   });
-  if (renamed) $("manageLibraryList").querySelector('.library-rename[data-puzzle-id="'+puzzle.id+'"]')?.focus();
+  if (renamed) $("manageLibraryList").querySelector('.library-menu[data-puzzle-id="'+puzzle.id+'"]')?.focus();
 }
 async function deleteLibraryPuzzle(puzzle) {
   if (libraryBusy || mode!=="build" || !["SL", "CJ"].includes(playerContext?.player.code)) return;
@@ -1126,24 +1159,22 @@ async function deleteLibraryPuzzle(puzzle) {
 $("manageLibrary").addEventListener("click",()=>{
   if (!LIBRARY_ENABLED || mode!=="build" || libraryBusy || !["SL", "CJ"].includes(playerContext?.player.code)) return;
   void libraryTask(async()=>{
-    libraryEntries=await (await cloudStore()).listPuzzles();
-    cacheLibrary(libraryEntries);renderManagedLibrary();$("manageLibraryCard").showModal();
+    libraryEntries=await readLibrary();
+    renderManagedLibrary(online()?undefined:"Offline: showing this device’s saved library copy.");$("manageLibraryCard").showModal();
   });
 });
 $("closeManageLibrary").addEventListener("click",()=>{if(!libraryBusy)$("manageLibraryCard").close();});
 $("manageLibraryCard").addEventListener("cancel",event=>{if(libraryBusy)event.preventDefault();});
-$("loadPuzzle").addEventListener("click",()=>{
-  if (libraryBusy || mode!=="build") return;
-  const puzzle=libraryEntries.find(p=>p.id===$("librarySelect").value);
-  if (!puzzle) return;
-  if (pieces.length && !confirm("Replace the current layout with this saved puzzle?")) return;
+function editLibraryPuzzle(puzzle) {
+  if (libraryBusy || mode!=="build" || !["SL", "CJ"].includes(playerContext?.player.code)) return;
+  if (pieces.length && !confirm("Replace the current layout with this saved puzzle? Unsaved changes will be replaced.")) return;
   const draft=preparePuzzleData({...puzzle,format:"move-red-loco-editor-v1"});
   recordEdit();pieces=draft.pieces;difficulty=draft.difficulty;exitRow=draft.exitRow;
   nextId=nextPieceId(pieces);libraryId=puzzle.id;libraryRevision=puzzle.revision;
   knownLibraryRevisions.set(libraryId,libraryRevision);
   $("puzzleTitle").value=puzzle.title;selectedId=null;selectedTemplate=null;selectedHue=null;
-  $("libraryCard").close();invalidateTest();render();status("Opened "+puzzle.title+" from the family library.");
-});
+  $("manageLibraryCard").close();invalidateTest();render();status("Opened "+puzzle.title+" from the family library.");
+}
 $("newPuzzle").addEventListener("click",()=>{
   if (mode!=="build" || libraryBusy) return;
   if (pieces.length && !confirm("Start a new puzzle? Unsaved changes to this layout will be replaced.")) return;
@@ -1164,35 +1195,38 @@ $("downloadArchive").addEventListener("click",()=>{
 $("restoreArchive").addEventListener("click",()=>{
   if (LIBRARY_ENABLED && mode==="build" && !libraryBusy && requireCreator()) $("archiveFile").click();
 });
-function restorePlan() { return planRestore(restoreArchive,libraryEntries,$("overwriteExisting").checked); }
-function renderRestorePlan() {
-  const plan=restorePlan();
-  const added=plan.entries.filter(entry=>entry.expectedRevision===0).length;
-  $("restoreSummary").textContent=added+" new puzzles. "+(plan.entries.length-added)+
-    " existing puzzles to replace. "+plan.skipped.length+" existing puzzles to keep.";
-  $("confirmRestore").disabled=plan.entries.length===0;
-}
 $("archiveFile").addEventListener("change",async event=>{
   const file=event.target.files?.[0];event.target.value="";
   if (!file || mode!=="build" || libraryBusy || !requireCreator()) return;
   await libraryTask(async()=>{
-    if (file.size>MAX_ARCHIVE_BYTES) throw Error("Archive exceeds 2 MB.");
-    const archive=normalizeArchive(JSON.parse(await file.text()));
-    const current=await (await cloudStore()).listPuzzles();
-    restoreArchive=archive;libraryEntries=current;
-    $("overwriteExisting").checked=false;renderRestorePlan();$("restoreCard").showModal();
+    await cloudStore();
+    if (file.size>MAX_ARCHIVE_BYTES) throw Error("Import exceeds 2 MB.");
+    importPlan=null;
+    const data=JSON.parse(await file.text());
+    const plan=planLibraryImport(data);
+    importPlan=plan;
+    $("restoreSummary").textContent="Add "+plan.entries.length+" puzzles as new copies. Existing puzzles will be kept.";
+    $("importPreview").replaceChildren();
+    for (const {puzzle} of plan.entries) {
+      const item=document.createElement("li");item.textContent=puzzle.title+" · "+puzzle.difficulty;
+      $("importPreview").appendChild(item);
+    }
+    $("restoreCard").showModal();
   });
 });
-$("overwriteExisting").addEventListener("change",renderRestorePlan);
-$("cancelRestore").addEventListener("click",()=>{$("restoreCard").close();restoreArchive=null;});
+$("cancelRestore").addEventListener("click",()=>{if(!libraryBusy){$("restoreCard").close();importPlan=null;}});
+$("restoreCard").addEventListener("cancel",event=>{if(libraryBusy)event.preventDefault();else importPlan=null;});
 $("confirmRestore").addEventListener("click",async()=>{
-  if (libraryBusy || !restoreArchive || !requireCreator()) return;
-  const plan=restorePlan();$("restoreCard").close();
+  if (libraryBusy || !importPlan || !requireCreator()) return;
   await libraryTask(async()=>{
-    const result=await (await cloudStore()).restorePuzzles(plan);
-    restoreArchive=null;
-    // Keep the old identity and revision. A subsequent Save must conflict until this layout is reopened.
-    status("Restored "+result.restored+" puzzles. Kept "+plan.skipped.length+" existing puzzles. Open the library to load a puzzle.");
+    const plan=importPlan;
+    const store=await cloudStore();
+    const result=await store.restorePuzzles(plan);
+    importPlan=null;$("restoreCard").close();
+    let message="Imported "+result.restored+" puzzles as new copies. Existing puzzles were kept.";
+    try {libraryEntries=await store.listPuzzles();cacheLibrary(libraryEntries);}
+    catch (_) {message+=" Import succeeded. Reopen Manage library to refresh the list.";}
+    renderManagedLibrary(message);status(message);
   });
 });
 

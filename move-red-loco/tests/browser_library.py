@@ -57,7 +57,7 @@ if(!sessionStorage.getItem('seeded')){{
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on("dialog", accept_dialog)
     page.goto(ORIGIN+"/move-red-loco/")
-    expect(page.locator("#libraryTools")).to_be_visible()
+    expect(page.locator("#playerBar")).to_contain_text(code)
     return context,page,errors
 
 
@@ -79,176 +79,133 @@ def send_archive(page, archive):
     page.locator("#archiveFile").set_input_files(dict(name="archive.json",mimeType="application/json",buffer=json.dumps(archive).encode()))
 
 
+def action(page, name, puzzle_id=None, touch=False):
+    trigger = page.locator('.library-menu[data-puzzle-id="'+puzzle_id+'"]') if puzzle_id else page.locator(".library-menu").first
+    if not page.locator("#puzzleActions").evaluate("el=>el.matches(':popover-open')"):
+        trigger.tap() if touch else trigger.click()
+    option = page.locator('[data-library-action="'+name+'"]')
+    expect(option).to_be_visible()
+    option.tap() if touch else option.click()
+
+
 with sync_playwright() as playwright:
     browser=playwright.chromium.launch(executable_path="/usr/bin/chromium",headless=True,args=["--no-sandbox"])
-    context,page,errors=load(browser)
-    page.locator("#puzzleTitle").fill("First family puzzle")
-    save(page)
-    expect(page.locator("#status")).to_contain_text("Saved in the family library")
-    records=cloud(page)
-    assert len(records)==1
-    saved_id=next(iter(records))
-    assert records[saved_id]["revision"]==1
-    save(page)
-    expect(page.locator("#status")).to_contain_text("Saved in the family library")
-    assert len(cloud(page))==1 and cloud(page)[saved_id]["revision"]==2
-
-    with page.expect_download() as downloaded:
+    for code in ["SL","CJ"]:
+        context,page,errors=load(browser,code=code)
+        # The middle block editor is unchanged; shared inventory counts follow actual pieces.
+        assert page.locator(".details button").all_text_contents()==["Rotate (R)","Remove (Delete)","Deselect (Esc)"]
+        expect(page.locator("#item-red .remaining")).to_have_text("0/1 Remaining")
+        for selector in ["#item-h2","#item-v2"]:
+            expect(page.locator(selector+" .remaining")).to_have_text("11/12 Remaining")
+        expect(page.locator("#item-h3 .remaining")).to_have_text("5/5 Remaining")
+        expect(page.locator("#item-platform .remaining")).to_have_text("2/2 Remaining")
+        assert page.locator("#item-h2 .remaining").evaluate("el=>getComputedStyle(el).fontSize")==page.locator("#item-h2 .dimension").evaluate("el=>getComputedStyle(el).fontSize")
+        assert page.locator(".left-panel #test,.left-panel #testResult,#reset,#openLibrary").count()==0
+        expect(page.locator("#testResult")).to_have_text("")
+        page.locator("#test").click()
+        expect(page.locator("#testResult")).to_have_text("Solvable — 1 moves")
+        page.locator('[data-piece-id="v2-1"]').click()
+        page.locator("#rotate").click()
+        expect(page.locator("#item-h2 .remaining")).to_have_text("11/12 Remaining")
+        page.locator("#remove").click()
+        expect(page.locator("#item-v2 .remaining")).to_have_text("12/12 Remaining")
+        expect(page.locator("#testResult")).to_have_text("")
+        page.locator("#undo").click()
+        expect(page.locator("#item-v2 .remaining")).to_have_text("11/12 Remaining")
+        page.locator("#undo").click()
+        page.locator("#puzzleTitle").fill(code+" family puzzle")
+        save(page)
+        records=cloud(page);saved_id=next(iter(records));original=records[saved_id]
+        assert original["createdBy"]=="uid-"+code
+        with page.expect_download() as downloaded:
+            page.locator("#export").click()
+        layout_path=ARTIFACTS/(code+"-layout.json");downloaded.value.save_as(layout_path)
+        layout=json.loads(layout_path.read_text())
+        assert layout["title"]==code+" family puzzle"
+        page.locator("#manageLibrary").click()
+        with page.expect_download() as downloaded:
+            page.locator("#downloadArchive").click()
+        path=ARTIFACTS/(code+"-library.json");downloaded.value.save_as(path)
+        archive=json.loads(path.read_text())
+        assert archive["puzzleCount"]==1 and archive["puzzles"][0]["id"]==saved_id
+        assert "createdBy" not in path.read_text() and "uid-" not in path.read_text()
+        board_before=page.locator("#board").inner_html()
+        send_archive(page,archive)
+        expect(page.locator("#restoreSummary")).to_have_text("Add 1 puzzles as new copies. Existing puzzles will be kept.")
+        expect(page.locator("#importPreview li")).to_have_text(code+" family puzzle · Starter")
+        assert cloud(page)==records
+        page.locator("#cancelRestore").click()
+        assert cloud(page)==records
+        send_archive(page,archive)
+        page.evaluate("window.testCloudDelay=500")
+        page.locator("#confirmRestore").click()
+        expect(page.locator("#confirmRestore")).to_be_disabled()
+        expect(page.locator("#cancelRestore")).to_be_disabled()
+        page.keyboard.press("Escape")
+        expect(page.locator("#restoreCard")).to_be_visible()
+        expect(page.locator("#manageLibraryMessage")).to_contain_text("Imported 1 puzzles as new copies")
+        records=cloud(page)
+        assert len(records)==2 and records[saved_id]==original
+        imported_id=next(i for i in records if i!=saved_id)
+        assert records[imported_id]["createdBy"]=="uid-"+code
+        assert page.locator("#board").inner_html()==board_before
+        page.evaluate("window.testCloudDelay=0")
+        # Single layout JSON imports into the library too, retaining its name.
+        send_archive(page,layout)
+        page.locator("#confirmRestore").click()
+        expect(page.locator("#manageLibraryList li")).to_have_count(3)
+        assert len(cloud(page))==3
+        # A malformed later entry cannot add an earlier valid entry.
+        before=cloud(page)
+        send_archive(page,[archive["puzzles"][0],{**layout,"pieces":[None]}])
+        expect(page.locator("#noticeMessage")).to_contain_text("Invalid puzzle block")
+        page.locator("#closeNotice").click()
+        assert cloud(page)==before
+        for flag,expected in [("testCloudFailure","Network interrupted"),("testCloudDenied","Firebase refused")]:
+            send_archive(page,archive)
+            page.evaluate(f"window.{flag}=true")
+            page.locator("#confirmRestore").click()
+            expect(page.locator("#noticeMessage")).to_contain_text(expected)
+            assert cloud(page)==before
+            page.locator("#closeNotice").click()
+            page.locator("#cancelRestore").click()
+            page.evaluate(f"window.{flag}=false")
+        # Edit targets the saved identity, so a later Save updates rather than duplicates it.
+        action(page,"edit",saved_id)
+        expect(page.locator("#manageLibraryCard")).not_to_be_visible()
+        page.locator("#puzzleTitle").fill(code+" edited")
+        save(page)
+        assert len(cloud(page))==3 and cloud(page)[saved_id]["revision"]==2
+        page.locator("#newPuzzle").click()
+        expect(page.locator("#board .piece")).to_have_count(0)
+        expect(page.locator("#item-red .remaining")).to_have_text("1/1 Remaining")
+        expect(page.locator("#item-v2 .remaining")).to_have_text("12/12 Remaining")
+        page.locator("#undo").click()
+        expect(page.locator("#puzzleTitle")).to_have_value(code+" edited")
+        save(page)
+        assert len(cloud(page))==3 and cloud(page)[saved_id]["revision"]==3
+        page.locator("#manageLibrary").click()
+        context.set_offline(True)
         page.locator("#downloadArchive").click()
-    path=ARTIFACTS / downloaded.value.suggested_filename
-    downloaded.value.save_as(path)
-    archive=json.loads(path.read_text())
-    assert archive["puzzleCount"]==1 and archive["puzzles"][0]["id"]==saved_id
-    assert "createdBy" not in archive["puzzles"][0] and "updatedBy" not in archive["puzzles"][0]
-    assert "uid-SL" not in path.read_text()
-    print("PASS: real cloud adapter with simulated SDK saves stable IDs and downloads server archive without account fields")
-
-    second={**archive["puzzles"][0],"id":"restored-puzzle","title":"Restored puzzle"}
-    restore={**archive,"puzzleCount":2,"puzzles":[archive["puzzles"][0],second]}
-    send_archive(page,restore)
-    expect(page.locator("#restoreSummary")).to_have_text("1 new puzzles. 0 existing puzzles to replace. 1 existing puzzles to keep.")
-    page.locator("#confirmRestore").click()
-    expect(page.locator("#status")).to_contain_text("Restored 1 puzzles")
-    assert len(cloud(page))==2 and cloud(page)[saved_id]["revision"]==2
-    assert cloud(page)["restored-puzzle"]["revision"]==1
-
-    restore["puzzles"][0]["title"]="Archive replacement"
-    send_archive(page,restore)
-    expect(page.locator("#restoreCard")).to_be_visible()
-    page.locator("#overwriteExisting").check()
-    expect(page.locator("#restoreSummary")).to_contain_text("2 existing puzzles to replace")
-    page.screenshot(path=str(ARTIFACTS / "restore-preview.png"))
-    page.locator("#confirmRestore").click()
-    expect(page.locator("#status")).to_contain_text("Restored 2 puzzles")
-    assert cloud(page)[saved_id]["revision"]==3
-    save(page)
-    expect(page.locator("#noticeMessage")).to_contain_text("changed on another device")
-    assert len(cloud(page))==2
-    page.locator("#closeNotice").click()
-    print("PASS: restore skips existing by default, requires explicit replacement, and stale loaded layout cannot create a duplicate")
-
-    page.locator("#openLibrary").click()
-    expect(page.locator("#libraryCard")).to_be_visible()
-    page.locator("#librarySelect").select_option(saved_id)
-    page.locator("#loadPuzzle").click()
-    expect(page.locator("#puzzleTitle")).to_have_value("Archive replacement")
-    page.locator('[data-piece-id="v2-1"]').click()
-    page.keyboard.press("ArrowUp")
-    save(page)
-    expect(page.locator("#status")).to_contain_text("Saved in the family library")
-    assert cloud(page)[saved_id]["revision"]==4
-    page.locator("#undo").click()
-    save(page)
-    expect(page.locator("#status")).to_contain_text("Saved in the family library")
-    assert cloud(page)[saved_id]["revision"]==5
-    print("PASS: library load and Undo after Save preserve current concurrency revision")
-
-    # A slow save freezes every layout mutation path until the awaited write completes.
-    before=page.locator("#board").inner_html()
-    page.evaluate("window.testCloudDelay=600")
-    save(page, acknowledge=False)
-    expect(page.locator("#save")).to_be_disabled()
-    expect(page.locator("#noticeCard")).not_to_be_visible()
-    page.locator('.exit-gate[data-exit-row="3"]').dispatch_event("click")
-    page.locator("#item-h3").dispatch_event("keydown",dict(key="Enter"))
-    page.locator('#board .tile[data-x="0"][data-y="0"]').dispatch_event("pointerdown",dict(button=0))
-    page.keyboard.press("ArrowDown")
-    expect(page.locator("#status")).to_contain_text("Saved in the family library")
-    expect(page.locator("#noticeTitle")).to_have_text("Puzzle saved")
-    expect(page.locator("#noticeMessage")).to_have_text("Saved in the family library:\nArchive replacement")
-    page.screenshot(path=str(ARTIFACTS / "cloud-save-confirmation.png"))
-    page.locator("#closeNotice").click()
-    assert page.locator("#board").inner_html()==before
-    page.evaluate("window.testCloudDelay=0")
-    print("PASS: delayed cloud Save blocks exit, palette, board, and keyboard edits")
-
-    before=cloud(page)
-    broken={**archive,"puzzleCount":2,"puzzles":[archive["puzzles"][0],archive["puzzles"][0]]}
-    send_archive(page,broken)
-    expect(page.locator("#noticeMessage")).to_contain_text("duplicate")
-    assert cloud(page)==before
-    page.locator("#closeNotice").click()
-    page.evaluate("window.testCloudFailure=true")
-    save(page)
-    expect(page.locator("#noticeMessage")).to_have_text("Network interrupted")
-    assert cloud(page)==before
-    assert page.evaluate("JSON.parse(localStorage.getItem('mrl-editor-v1:uid-SL')).title")=="Archive replacement"
-    page.locator("#closeNotice").click()
-    page.evaluate("window.testCloudFailure=false")
-    context.set_offline(True)
-    save(page, acknowledge=False)
-    expect(page.locator("#status")).to_contain_text("Saved on this device")
-    expect(page.locator("#noticeCard")).not_to_be_visible()
-    assert cloud(page)==before
-    page.locator("#downloadArchive").click()
-    expect(page.locator("#noticeMessage")).to_contain_text("Connect to the internet")
-    page.locator("#closeNotice").click()
-    page.locator("#openLibrary").click()
-    expect(page.locator("#libraryMessage")).to_contain_text("Offline")
-    page.locator("#closeLibrary").click()
-    assert not errors,errors
-    context.close()
-    print("PASS: invalid archive, failed cloud write, offline local Save, online-only archive, and offline library cache")
-
-    # A confirmed cloud write still gets a truthful confirmation if the later device copy fails.
-    context,page,errors=load(browser)
-    page.evaluate("""() => {
-      const original=Storage.prototype.setItem;
-      let cloudCommitted=false;
-      Storage.prototype.setItem=function(key,value){
-        if(cloudCommitted && key.startsWith('mrl-editor-'))throw Error('Device storage unavailable');
-        const result=original.call(this,key,value);
-        if(key==='test-cloud-puzzles')cloudCommitted=true;
-        return result;
-      };
-    }""")
-    save(page, acknowledge=False)
-    expect(page.locator("#noticeTitle")).to_have_text("Puzzle saved")
-    expect(page.locator("#noticeMessage")).to_contain_text("The device copy could not be updated.")
-    assert len(cloud(page))==1
-    assert not errors,errors
-    context.close()
-    print("PASS: cloud confirmation remains accurate when the later device copy fails")
-
-    context,page,errors=load(browser,code="CJ",viewport=dict(width=390,height=844))
-    expect(page.locator("#manageLibrary")).to_be_visible()
-    page.locator("#manageLibrary").click()
-    expect(page.locator("#manageLibraryCard")).to_be_visible()
-    page.locator("#closeManageLibrary").click()
-    page.locator("#downloadArchive").click()
-    expect(page.locator("#noticeMessage")).to_have_text("Only SL can export or restore puzzle files.")
-    page.locator("#closeNotice").click()
-    page.locator("#restoreArchive").click()
-    expect(page.locator("#noticeMessage")).to_have_text("Only SL can export or restore puzzle files.")
-    page.locator("#closeNotice").click()
-    page.locator("#openLibrary").click()
-    expect(page.locator("#libraryMessage")).to_have_text("No puzzles have been saved yet.")
-    page.locator("#closeLibrary").click()
-    assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
-    page.locator("#puzzleTitle").fill("CJ saved puzzle")
-    save(page)
-    assert len(cloud(page)) == 1
-    assert next(iter(cloud(page).values()))["createdBy"] == "uid-CJ"
-    page.locator("#export").click()
-    expect(page.locator("#noticeMessage")).to_have_text("Only SL can export or restore puzzle files.")
-    page.locator("#closeNotice").click()
-    page.locator("#manageLibrary").click()
-    page.locator(".library-delete").click()
-    expect(page.locator("#manageLibraryList li")).to_have_count(0)
-    assert len(cloud(page)) == 0
-    page.locator("#closeManageLibrary").click()
-    page.screenshot(path=str(ARTIFACTS / "library-phone.png"))
-    assert not errors,errors
-    context.close()
-    print("PASS: CJ saves and confirms deletion on phone; archive controls remain SL-only")
+        expect(page.locator("#noticeMessage")).to_contain_text("Connect to the internet")
+        page.locator("#closeNotice").click()
+        page.locator("#closeManageLibrary").click()
+        page.locator("#manageLibrary").click()
+        expect(page.locator("#manageLibraryMessage")).to_contain_text("Offline")
+        expect(page.locator("#manageLibraryList li")).to_have_count(3)
+        assert not errors,errors
+        context.close()
+        print("PASS: "+code+" inventory, unchanged middle tools, Test Layout, JSON export, import preview/cancel/atomic copies, invalid/failed imports, Edit/Save identity, New/Reset/Undo, offline cache")
 
     context,page,errors=load(browser,code="YC")
     expect(page.locator("#manageLibrary")).not_to_be_visible()
     page.locator("#manageLibrary").dispatch_event("click")
     expect(page.locator("#manageLibraryCard")).not_to_be_visible()
+    send_archive(page,archive)
+    assert cloud(page)=={}
     assert not errors,errors
     context.close()
-    print("PASS: YC cannot open library deletion controls")
+    print("PASS: YC cannot open Manage library or import cloud puzzles directly")
 
     context,page,errors=load(browser)
     page.locator("#puzzleTitle").fill("Duplicate puzzle")
@@ -280,15 +237,15 @@ with sync_playwright() as playwright:
         confirmations.append(dialog.message)
         dialog.dismiss()
     page.once("dialog",cancel_delete)
-    page.locator('.library-delete[data-puzzle-id="duplicate-puzzle"]').click()
+    action(page,"delete","duplicate-puzzle")
     assert len(confirmations)==1 and 'Delete "Duplicate puzzle"' in confirmations[0]
     assert len(cloud(page))==2
     expect(page.locator("#manageLibraryList li")).to_have_count(2)
     page.evaluate("window.testCloudDelay=600")
     page.once("dialog",lambda dialog: dialog.accept())
-    page.locator('.library-delete[data-puzzle-id="duplicate-puzzle"]').click()
+    action(page,"delete","duplicate-puzzle")
     expect(page.locator("#closeManageLibrary")).to_be_disabled()
-    expect(page.locator(".library-delete").first).to_be_disabled()
+    expect(page.locator(".library-menu").first).to_be_disabled()
     page.keyboard.press("Escape")
     expect(page.locator("#manageLibraryCard")).to_be_visible()
     expect(page.locator("#manageLibraryList li")).to_have_count(1)
@@ -305,7 +262,7 @@ with sync_playwright() as playwright:
         before=cloud(page)
         page.evaluate(f"window.{flag}=true")
         page.once("dialog",lambda dialog: dialog.accept())
-        page.locator(".library-delete").click()
+        action(page,"delete")
         expect(page.locator("#noticeMessage")).to_contain_text(expected)
         assert cloud(page)==before
         expect(page.locator("#manageLibraryList li")).to_have_count(1)
@@ -317,14 +274,14 @@ with sync_playwright() as playwright:
       localStorage.setItem('test-cloud-puzzles',JSON.stringify(records));
     }""")
     page.once("dialog",lambda dialog: dialog.accept())
-    page.locator(".library-delete").click()
+    action(page,"delete")
     expect(page.locator("#noticeMessage")).to_contain_text("changed or was deleted")
     assert len(cloud(page))==1
     page.locator("#closeNotice").click()
     page.locator("#closeManageLibrary").click()
     page.locator("#manageLibrary").click()
     page.once("dialog",lambda dialog: dialog.accept())
-    page.locator(".library-delete").click()
+    action(page,"delete")
     expect(page.locator("#manageLibraryList li")).to_have_count(0)
     expect(page.locator("#manageLibraryMessage")).to_contain_text("No puzzles have been saved yet")
     assert cloud(page)=={}
@@ -335,10 +292,8 @@ with sync_playwright() as playwright:
     page.locator("#closeNotice").click()
     context.set_offline(True)
     page.locator("#manageLibrary").click()
-    expect(page.locator("#noticeMessage")).to_contain_text("Connect to the internet")
-    page.locator("#closeNotice").click()
-    page.locator("#openLibrary").click()
-    expect(page.locator("#librarySelect option")).to_have_count(0)
+    expect(page.locator("#manageLibraryMessage")).to_contain_text("Offline")
+    expect(page.locator("#manageLibraryList li")).to_have_count(0)
     assert not errors,errors
     context.close()
     print("PASS: interrupted, denied, stale, and offline deletion preserve data; empty library and stale Save do not recreate deleted puzzles")
@@ -359,9 +314,9 @@ with sync_playwright() as playwright:
     assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
     assert page.locator("#manageLibraryList").evaluate("el=>el.scrollWidth<=el.clientWidth")
     page.screenshot(path=str(ARTIFACTS / "manage-library-phone.png"))
-    page.locator(".library-delete").first.tap()
+    action(page,"delete",touch=True)
     expect(page.locator("#manageLibraryList li")).to_have_count(1)
-    page.locator(".library-delete").tap()
+    action(page,"delete",touch=True)
     expect(page.locator("#manageLibraryList li")).to_have_count(0)
     assert cloud(page)=={}
     assert not errors,errors
@@ -378,26 +333,26 @@ with sync_playwright() as playwright:
     draft_before=page.evaluate("localStorage.getItem('mrl-editor-v1:uid-CJ')")
     page.locator("#manageLibrary").click()
     expect(page.locator("#manageLibraryCard")).to_be_visible()
-    expect(page.locator(".library-rename")).to_be_visible()
+    expect(page.locator(".library-menu")).to_be_visible()
     page.remove_listener("dialog",accept_dialog)
     def cancel_rename(dialog):
         assert dialog.default_value == "Puzzle 2"
         dialog.dismiss()
     page.once("dialog",cancel_rename)
-    page.locator(".library-rename").click()
+    action(page,"rename")
     assert cloud(page)[saved_id] == before
     for invalid in ["   ","x"*81]:
         page.once("dialog",lambda dialog,value=invalid: dialog.accept(value))
-        page.locator(".library-rename").click()
+        action(page,"rename")
         expect(page.locator("#noticeCard")).to_be_visible()
         expect(page.locator("#noticeMessage")).to_contain_text("Enter a puzzle name")
         page.locator("#closeNotice").click()
         assert cloud(page)[saved_id] == before
     page.evaluate("window.testCloudDelay=600")
     page.once("dialog",lambda dialog: dialog.accept("  Puzzle 10  "))
-    page.locator(".library-rename").click()
-    expect(page.locator(".library-rename")).to_be_disabled()
-    expect(page.locator(".library-delete")).to_be_disabled()
+    action(page,"rename")
+    expect(page.locator(".library-menu")).to_be_disabled()
+    expect(page.locator(".library-menu")).to_be_disabled()
     expect(page.locator("#closeManageLibrary")).to_be_disabled()
     expect(page.locator("#manageLibraryMessage")).to_contain_text('Renamed puzzle to "Puzzle 10"')
     after=cloud(page)[saved_id]
@@ -412,13 +367,13 @@ with sync_playwright() as playwright:
     cached=page.evaluate("JSON.parse(localStorage.getItem('mrl-library-v1:uid-CJ'))")
     assert cached[0]["title"] == "Puzzle 10" and cached[0]["revision"] == 2
     page.once("dialog",lambda dialog: dialog.accept("Puzzle 10"))
-    page.locator(".library-rename").click()
+    action(page,"rename")
     assert cloud(page)[saved_id]["revision"] == 2
     page.locator("#closeManageLibrary").click()
     context.set_offline(True)
-    page.locator("#openLibrary").click()
-    expect(page.locator("#librarySelect option")).to_contain_text("Puzzle 10")
-    page.locator("#closeLibrary").click()
+    page.locator("#manageLibrary").click()
+    expect(page.locator("#manageLibraryList strong")).to_have_text("Puzzle 10")
+    page.locator("#closeManageLibrary").click()
     context.set_offline(False)
     page.locator("#undo").click()
     expect(page.locator("#puzzleTitle")).to_have_value("Puzzle 10")
@@ -435,7 +390,7 @@ with sync_playwright() as playwright:
     page.locator("#manageLibrary").click()
     expect(page.locator("#manageLibraryCard")).to_be_visible()
     page.once("dialog",lambda dialog: dialog.accept("Remote layout name"))
-    page.locator(".library-rename").click()
+    action(page,"rename")
     expect(page.locator("#manageLibraryMessage")).to_contain_text('Renamed puzzle to "Remote layout name"')
     page.locator("#closeManageLibrary").click()
     save(page,acknowledge=False)
@@ -451,7 +406,7 @@ with sync_playwright() as playwright:
       localStorage.setItem('test-cloud-puzzles',JSON.stringify(records));
     }""")
     page.once("dialog",lambda dialog: dialog.accept("Stale rename"))
-    page.locator(".library-rename").click()
+    action(page,"rename")
     expect(page.locator("#noticeCard")).to_be_visible()
     expect(page.locator("#noticeMessage")).to_contain_text("changed on another device")
     assert cloud(page)[saved_id]["title"] == "Other device name"
@@ -463,7 +418,7 @@ with sync_playwright() as playwright:
         before=cloud(page)
         page.evaluate(f"window.{flag}=true")
         page.once("dialog",lambda dialog: dialog.accept("Failed rename"))
-        page.locator(".library-rename").click()
+        action(page,"rename")
         expect(page.locator("#noticeCard")).to_be_visible()
         expect(page.locator("#noticeMessage")).to_contain_text(expected)
         assert cloud(page) == before
@@ -471,7 +426,7 @@ with sync_playwright() as playwright:
         page.evaluate(f"window.{flag}=false")
     context.set_offline(True)
     page.once("dialog",lambda dialog: dialog.accept("Offline rename"))
-    page.locator(".library-rename").click()
+    action(page,"rename")
     expect(page.locator("#noticeCard")).to_be_visible()
     expect(page.locator("#noticeMessage")).to_contain_text("Connect to the internet")
     assert cloud(page)[saved_id]["title"] == "Other device name"
@@ -479,7 +434,7 @@ with sync_playwright() as playwright:
     context.set_offline(False)
     page.evaluate("window.testCloudReadDenied=true")
     page.once("dialog",lambda dialog: dialog.accept("Saved despite refresh failure"))
-    page.locator(".library-rename").click()
+    action(page,"rename")
     expect(page.locator("#manageLibraryMessage")).to_contain_text("The name was saved")
     assert cloud(page)[saved_id]["title"] == "Saved despite refresh failure"
     assert not errors,errors
@@ -490,17 +445,134 @@ with sync_playwright() as playwright:
     page.locator("#puzzleTitle").fill("Phone puzzle")
     save(page)
     page.locator("#manageLibrary").tap()
-    pen=page.locator(".library-rename").bounding_box()
-    remove=page.locator(".library-delete").bounding_box()
-    assert abs(pen["y"]-remove["y"]) < 1 and pen["x"]+pen["width"] <= remove["x"]
-    assert pen["width"] >= 44 and pen["height"] >= 44
+    menu=page.locator(".library-menu").bounding_box()
+    assert menu["width"] >= 44 and menu["height"] >= 44
     page.remove_listener("dialog",accept_dialog)
     page.once("dialog",lambda dialog: dialog.accept("Renamed on phone"))
-    page.locator(".library-rename").tap()
+    action(page,"rename",touch=True)
     expect(page.locator("#manageLibraryList strong")).to_have_text("Renamed on phone")
     assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
     page.screenshot(path=str(ARTIFACTS / "manage-library-rename-phone.png"))
     assert not errors,errors
     context.close()
-    print("PASS: SL touch rename has adjacent pen/delete buttons, large touch targets, and no phone overflow")
+    print("PASS: SL touch menu offers rename, large touch targets, and no phone overflow")
+    # Retain Save regressions while library controls move into the management card.
+    context,page,errors=load(browser)
+    page.locator("#puzzleTitle").fill("Slow save")
+    before=page.locator("#board").inner_html()
+    page.evaluate("window.testCloudDelay=600")
+    save(page,acknowledge=False)
+    expect(page.locator("#save")).to_be_disabled()
+    expect(page.locator("#test")).to_be_disabled()
+    page.locator('.exit-gate[data-exit-row="3"]').dispatch_event("click")
+    page.locator("#item-h3").dispatch_event("keydown",dict(key="Enter"))
+    page.locator('#board .tile[data-x="0"][data-y="0"]').dispatch_event("pointerdown",dict(button=0))
+    page.keyboard.press("ArrowDown")
+    expect(page.locator("#noticeTitle")).to_have_text("Puzzle saved")
+    expect(page.locator("#noticeMessage")).to_have_text("Saved in the family library:\nSlow save")
+    page.locator("#closeNotice").click()
+    assert page.locator("#board").inner_html()==before
+    page.evaluate("window.testCloudDelay=0")
+    records=cloud(page)
+    context.set_offline(True)
+    page.locator("#puzzleTitle").fill("Offline draft")
+    save(page,acknowledge=False)
+    expect(page.locator("#status")).to_contain_text("Saved on this device")
+    expect(page.locator("#noticeCard")).not_to_be_visible()
+    assert cloud(page)==records
+    assert page.evaluate("JSON.parse(localStorage.getItem('mrl-editor-v1:uid-SL')).title")=="Offline draft"
+    assert not errors,errors
+    context.close()
+    print("PASS: slow cloud Save blocks layout edits and Test Layout; offline Save preserves a draft without claiming cloud success")
+
+    context,page,errors=load(browser)
+    page.evaluate("""() => {
+      const original=Storage.prototype.setItem;
+      let cloudCommitted=false;
+      Storage.prototype.setItem=function(key,value){
+        if(cloudCommitted && key.startsWith('mrl-editor-'))throw Error('Device storage unavailable');
+        const result=original.call(this,key,value);
+        if(key==='test-cloud-puzzles')cloudCommitted=true;
+        return result;
+      };
+    }""")
+    save(page,acknowledge=False)
+    expect(page.locator("#noticeTitle")).to_have_text("Puzzle saved")
+    expect(page.locator("#noticeMessage")).to_contain_text("The device copy could not be updated.")
+    assert len(cloud(page))==1
+    assert not errors,errors
+    context.close()
+    print("PASS: cloud Save confirmation stays accurate when the later device write fails")
+
+    # Short windows keep library actions visible and menu options escape the tile scroll area.
+    context,page,errors=load(browser,code="CJ")
+    page.locator("#puzzleTitle").fill("Original")
+    save(page)
+    original=cloud(page);saved_id=next(iter(original))
+    page.evaluate("""() => {
+      const records=JSON.parse(localStorage.getItem('test-cloud-puzzles'));
+      const first=Object.values(records)[0];
+      for(let i=1;i<=60;i++)records['copy-'+i]={...first,title:'Puzzle '+i};
+      localStorage.setItem('test-cloud-puzzles',JSON.stringify(records));
+    }""")
+    page.locator("#manageLibrary").click()
+    for width,height in [(1200,650),(700,500),(390,700),(844,390)]:
+        page.set_viewport_size(dict(width=width,height=height))
+        expect(page.locator("#manageLibraryCard")).to_be_visible()
+        assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+        for selector in ["#closeManageLibrary","#downloadArchive","#restoreArchive"]:
+            box=page.locator(selector).bounding_box()
+            assert box and box["y"]>=0 and box["y"]+box["height"]<=height
+        grid=page.locator("#manageLibraryList")
+        assert grid.evaluate("el=>el.scrollHeight>el.clientHeight && el.scrollWidth<=el.clientWidth")
+        grid.evaluate("el=>el.scrollTop=el.scrollHeight")
+        trigger=page.locator(".library-menu").last
+        trigger.click()
+        menu=page.locator("#puzzleActions")
+        expect(menu).to_be_visible()
+        box=menu.bounding_box()
+        assert box["y"]>=0 and box["y"]+box["height"]<=height
+        page.keyboard.press("ArrowDown")
+        expect(page.locator('[data-library-action="rename"]')).to_be_focused()
+        page.keyboard.press("Escape")
+        expect(menu).not_to_be_visible()
+        expect(trigger).to_be_focused()
+        expect(page.locator("#manageLibraryCard")).to_be_visible()
+        page.screenshot(path=str(ARTIFACTS/f"workshop-library-{width}x{height}.png"))
+    page.set_viewport_size(dict(width=1200,height=900))
+    # Cancel Edit, reset, and single-layout import without changing the draft.
+    page.remove_listener("dialog",accept_dialog)
+    board_before=page.locator("#board").inner_html()
+    page.once("dialog",lambda dialog:dialog.dismiss())
+    action(page,"edit",saved_id)
+    expect(page.locator("#manageLibraryCard")).to_be_visible()
+    assert page.locator("#board").inner_html()==board_before
+    page.locator("#closeManageLibrary").click()
+    page.once("dialog",lambda dialog:dialog.dismiss())
+    page.locator("#newPuzzle").click()
+    assert page.locator("#board").inner_html()==board_before
+    page.once("dialog",lambda dialog:dialog.dismiss())
+    page.locator("#importFile").set_input_files(dict(name="layout.json",mimeType="application/json",buffer=json.dumps(puzzle([])).encode()))
+    expect(page.locator("#status")).not_to_contain_text("Imported 0")
+    assert page.locator("#board").inner_html()==board_before
+    page.on("dialog",accept_dialog)
+    page.locator("#newPuzzle").click()
+    expect(page.locator("#board .piece")).to_have_count(0)
+    page.locator("#puzzleTitle").fill("Separate blank puzzle")
+    save(page)
+    records=cloud(page)
+    assert len(records)==62 and records[saved_id]==original[saved_id]
+    # Verify the requested three-row layout, including an initially blank full-width output.
+    for width,height in [(1200,900),(700,800),(390,844)]:
+        page.set_viewport_size(dict(width=width,height=height))
+        reset=page.locator("#newPuzzle").bounding_box();test=page.locator("#test").bounding_box()
+        result=page.locator("#testResult").bounding_box();export=page.locator("#export").bounding_box()
+        imported=page.locator("#import").bounding_box()
+        assert abs(reset['y']-test['y'])<1 and reset['x']<test['x']
+        assert result['y']>=reset['y']+reset['height'] and result['width']>=reset['width']+test['width']
+        assert export['y']>=result['y']+result['height'] and abs(export['y']-imported['y'])<1
+        page.screenshot(path=str(ARTIFACTS/f"workshop-actions-{width}x{height}.png"))
+    assert not errors,errors
+    context.close()
+    print("PASS: responsive library scrolling, visible header actions, keyboard menu, cancelled Edit/reset/import, new puzzle identity, three-row layout actions")
     browser.close()
