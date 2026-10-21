@@ -7,7 +7,7 @@ const conflict = () => Object.assign(new Error("This puzzle changed on another d
 export function createLibraryStore(adapter) {
   async function player(permission = "read") {
     const p = await adapter.player();
-    if (!p || (permission !== "read" && !(["save", "delete"].includes(permission) ? ["SL", "CJ"].includes(p.code) : p.code === "SL"))) throw Object.assign(new Error(["save", "delete"].includes(permission) ? "Only SL or CJ can save or delete library puzzles." : "Only SL can change the puzzle library."),{code:"permission-denied"});
+    if (!p || (permission !== "read" && !(["save", "delete"].includes(permission) ? ["SL", "CJ"].includes(p.code) : p.code === "SL"))) throw Object.assign(new Error(["save", "delete"].includes(permission) ? "Only SL or CJ can save, rename, or delete library puzzles." : "Only SL can change the puzzle library."),{code:"permission-denied"});
     return p;
   }
   function content(title, layout) {
@@ -35,6 +35,20 @@ export function createLibraryStore(adapter) {
       tx.set(id,{...data,revision,createdAt:old?.createdAt ?? adapter.timestamp(),
         updatedAt:adapter.timestamp(),createdBy:old?.createdBy ?? p.uid,updatedBy:p.uid});
       return {id,revision};
+    });
+  }
+  async function renamePuzzle({id,title,expectedRevision}) {
+    const p = await player("save");
+    if (!validPuzzleId(id) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1 ||
+        expectedRevision >= Number.MAX_SAFE_INTEGER - 1) throw Error("Invalid puzzle ID or revision.");
+    if (typeof title !== "string" || !title.trim() || title.trim().length > 80) throw Error("Enter a puzzle name (1–80 characters).");
+    const name = title.trim();
+    return adapter.transact(async tx => {
+      const old = await tx.get(id);
+      if (!old || old.revision !== expectedRevision) throw conflict();
+      const revision = expectedRevision + 1;
+      tx.set(id,{...old,title:name,revision,updatedAt:adapter.timestamp(),updatedBy:p.uid});
+      return {id,title:name,revision};
     });
   }
   async function deletePuzzle({id,expectedRevision}) {
@@ -80,5 +94,5 @@ export function createLibraryStore(adapter) {
       return {restored:entries.length};
     });
   }
-  return {listPuzzles,savePuzzle,deletePuzzle,restorePuzzles};
+  return {listPuzzles,savePuzzle,renamePuzzle,deletePuzzle,restorePuzzles};
 }

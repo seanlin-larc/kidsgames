@@ -193,20 +193,22 @@ button:focus-visible,.palette-card:focus-visible,.board:focus-visible,
 .manage-tier{margin:0 0 24px}
 .manage-tier:last-child{margin-bottom:0}
 .manage-tier h3{margin:0 0 10px;font-size:18px}
-.manage-grid{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.manage-grid{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
 .manage-grid li{display:flex;align-items:flex-start;gap:10px;min-width:0;min-height:96px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
 .manage-empty{font-size:14px;color:var(--muted);line-height:1.5}
 .manage-entry{flex:1;min-width:0;overflow-wrap:anywhere}
 .manage-entry strong,.manage-entry small{display:block}
 .manage-entry small{margin-top:4px;color:var(--muted);font-size:12px}
-.notice-card .library-delete{min-width:44px;min-height:44px;flex:none;font-size:24px;color:var(--bad);padding:0;border-radius:10px}
+.manage-actions{display:flex;gap:6px;flex:none}
+.notice-card .library-delete,.notice-card .library-rename{min-width:44px;min-height:44px;flex:none;font-size:24px;padding:0;border-radius:10px}
+.notice-card .library-delete{color:var(--bad)}
 #manageLibraryCard .dialog-actions{justify-content:flex-end}
 #manageLibrary,#manageLibraryCard button{-webkit-tap-highlight-color:transparent}
 @media(max-width:600px){
  #manageLibraryCard{padding:16px}
  .manage-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
  .manage-grid li{position:relative;padding:12px 10px 56px;min-height:140px}
- .manage-grid .library-delete{position:absolute;right:8px;bottom:8px}
+ .manage-grid .manage-actions{position:absolute;right:8px;bottom:8px}
 }
 .dialog-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:16px}
 .restore-choice{display:flex;align-items:center;gap:8px;text-align:left;font-size:14px}

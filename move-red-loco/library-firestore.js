@@ -19,4 +19,4 @@ const store = createLibraryStore({
     delete:id=>transaction.delete(reference(id))
   }))
 });
-export const {listPuzzles,savePuzzle,deletePuzzle,restorePuzzles} = store;
+export const {listPuzzles,savePuzzle,renamePuzzle,deletePuzzle,restorePuzzles} = store;

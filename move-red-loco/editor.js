@@ -1004,7 +1004,7 @@ async function libraryTask(work) {
   try { return await work(); }
   catch(error) {
     const message=error.code==="permission-denied" ?
-      "Firebase refused this action. Sign in as SL for changes. Cloud setup may still be pending." : error.message;
+      "Firebase refused this action. Check your sign-in and permissions." : error.message;
     status("Library action did not finish: " + message);
     showNotice("Puzzle library",message);
   } finally { libraryBusy=false; render(); }
@@ -1066,16 +1066,48 @@ function renderManagedLibrary(message) {
       title.textContent=puzzle.title;
       details.textContent="Updated "+new Date(puzzle.updatedAt).toLocaleString();
       entry.append(title,details);
+      const actions=document.createElement("div");actions.className="manage-actions";
+      const rename=document.createElement("button");
+      rename.type="button";rename.className="action library-rename";rename.textContent="✎";
+      rename.dataset.puzzleId=puzzle.id;rename.setAttribute("aria-label","Rename "+puzzle.title);rename.title="Rename puzzle";
+      rename.addEventListener("click",()=>{void renameLibraryPuzzle(puzzle);});
       const remove=document.createElement("button");
       remove.type="button";remove.className="action library-delete";remove.textContent="×";
       remove.dataset.puzzleId=puzzle.id;remove.setAttribute("aria-label","Delete "+puzzle.title);
       remove.addEventListener("click",()=>{void deleteLibraryPuzzle(puzzle);});
-      row.append(entry,remove);grid.appendChild(row);
+      actions.append(rename,remove);row.append(entry,actions);grid.appendChild(row);
     }
     section.appendChild(grid);list.appendChild(section);
   }
   $("manageLibraryMessage").textContent=(message ? message+"\n" : "")+
-    (libraryEntries.length ? "Select × beside a puzzle to delete it." : "No puzzles have been saved yet.");
+    (libraryEntries.length ? "Select ✎ to rename a puzzle, or × to delete it." : "No puzzles have been saved yet.");
+}
+async function renameLibraryPuzzle(puzzle) {
+  if (libraryBusy || mode!=="build" || !["SL", "CJ"].includes(playerContext?.player.code)) return;
+  const entered=prompt("Rename puzzle (1–80 characters):",puzzle.title);
+  if (entered===null || entered.trim()===puzzle.title) return;
+  const renamed=await libraryTask(async()=>{
+    const store=await cloudStore();
+    const result=await store.renamePuzzle({id:puzzle.id,title:entered,expectedRevision:puzzle.revision});
+    // A metadata-only change must not authorize overwriting an unseen layout revision.
+    if (knownLibraryRevisions.get(puzzle.id)===puzzle.revision) knownLibraryRevisions.set(puzzle.id,result.revision);
+    for (const snapshot of [...undoStack,...redoStack]) {
+      if (snapshot.libraryId===puzzle.id && snapshot.libraryRevision===puzzle.revision && snapshot.title?.trim()===puzzle.title) snapshot.title=result.title;
+    }
+    if (libraryId===puzzle.id && libraryRevision===puzzle.revision) {
+      libraryRevision=result.revision;
+      if ($("puzzleTitle").value.trim()===puzzle.title) $("puzzleTitle").value=result.title;
+    }
+    libraryEntries=libraryEntries.map(entry=>entry.id===puzzle.id ? {...entry,title:result.title,revision:result.revision} : entry);
+    let refreshMessage="";
+    try { libraryEntries=await store.listPuzzles(); }
+    catch (_) { refreshMessage=" The name was saved. Reopen Manage library to refresh its update time."; }
+    cacheLibrary(libraryEntries);
+    const message='Renamed puzzle to "'+result.title+'".'+refreshMessage;
+    renderManagedLibrary(message);status(message);
+    return true;
+  });
+  if (renamed) $("manageLibraryList").querySelector('.library-rename[data-puzzle-id="'+puzzle.id+'"]')?.focus();
 }
 async function deleteLibraryPuzzle(puzzle) {
   if (libraryBusy || mode!=="build" || !["SL", "CJ"].includes(playerContext?.player.code)) return;

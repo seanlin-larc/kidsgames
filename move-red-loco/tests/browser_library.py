@@ -14,7 +14,7 @@ export const doc=(db,...parts)=>({id:parts.at(-1)});
 export const collection=(db,name)=>({name});
 export const serverTimestamp=()=>({_serverTimestamp:true});
 export async function getDocsFromServer(){
- if(window.testCloudDenied)throw Object.assign(Error('Denied'),{code:'permission-denied'});
+ if(window.testCloudDenied||window.testCloudReadDenied)throw Object.assign(Error('Denied'),{code:'permission-denied'});
  return {docs:Object.entries(read()).map(([id,data])=>({id,data:()=>fromWire(data)}))};
 }
 export async function runTransaction(db,work){
@@ -280,13 +280,13 @@ with sync_playwright() as playwright:
         confirmations.append(dialog.message)
         dialog.dismiss()
     page.once("dialog",cancel_delete)
-    page.locator('[data-puzzle-id="duplicate-puzzle"]').click()
+    page.locator('.library-delete[data-puzzle-id="duplicate-puzzle"]').click()
     assert len(confirmations)==1 and 'Delete "Duplicate puzzle"' in confirmations[0]
     assert len(cloud(page))==2
     expect(page.locator("#manageLibraryList li")).to_have_count(2)
     page.evaluate("window.testCloudDelay=600")
     page.once("dialog",lambda dialog: dialog.accept())
-    page.locator('[data-puzzle-id="duplicate-puzzle"]').click()
+    page.locator('.library-delete[data-puzzle-id="duplicate-puzzle"]').click()
     expect(page.locator("#closeManageLibrary")).to_be_disabled()
     expect(page.locator(".library-delete").first).to_be_disabled()
     page.keyboard.press("Escape")
@@ -367,4 +367,140 @@ with sync_playwright() as playwright:
     assert not errors,errors
     context.close()
     print("PASS: phone touch deletion and long puzzle names fit the management card")
+    context,page,errors=load(browser,code="CJ")
+    page.locator("#puzzleTitle").fill("Puzzle 2")
+    save(page)
+    saved_id=next(iter(cloud(page)))
+    before=cloud(page)[saved_id]
+    page.locator('[data-piece-id="v2-1"]').click()
+    page.keyboard.press("ArrowDown")
+    board_before=page.locator("#board").inner_html()
+    draft_before=page.evaluate("localStorage.getItem('mrl-editor-v1:uid-CJ')")
+    page.locator("#manageLibrary").click()
+    expect(page.locator("#manageLibraryCard")).to_be_visible()
+    expect(page.locator(".library-rename")).to_be_visible()
+    page.remove_listener("dialog",accept_dialog)
+    def cancel_rename(dialog):
+        assert dialog.default_value == "Puzzle 2"
+        dialog.dismiss()
+    page.once("dialog",cancel_rename)
+    page.locator(".library-rename").click()
+    assert cloud(page)[saved_id] == before
+    for invalid in ["   ","x"*81]:
+        page.once("dialog",lambda dialog,value=invalid: dialog.accept(value))
+        page.locator(".library-rename").click()
+        expect(page.locator("#noticeCard")).to_be_visible()
+        expect(page.locator("#noticeMessage")).to_contain_text("Enter a puzzle name")
+        page.locator("#closeNotice").click()
+        assert cloud(page)[saved_id] == before
+    page.evaluate("window.testCloudDelay=600")
+    page.once("dialog",lambda dialog: dialog.accept("  Puzzle 10  "))
+    page.locator(".library-rename").click()
+    expect(page.locator(".library-rename")).to_be_disabled()
+    expect(page.locator(".library-delete")).to_be_disabled()
+    expect(page.locator("#closeManageLibrary")).to_be_disabled()
+    expect(page.locator("#manageLibraryMessage")).to_contain_text('Renamed puzzle to "Puzzle 10"')
+    after=cloud(page)[saved_id]
+    assert after["title"] == "Puzzle 10" and after["revision"] == 2
+    assert after["updatedBy"] == "uid-CJ"
+    for key in ["pieces","difficulty","exitRow","format","createdAt","createdBy"]:
+        assert after[key] == before[key]
+    assert page.locator("#board").inner_html() == board_before
+    assert page.evaluate("localStorage.getItem('mrl-editor-v1:uid-CJ')") == draft_before
+    expect(page.locator("#puzzleTitle")).to_have_value("Puzzle 10")
+    page.evaluate("window.testCloudDelay=0")
+    cached=page.evaluate("JSON.parse(localStorage.getItem('mrl-library-v1:uid-CJ'))")
+    assert cached[0]["title"] == "Puzzle 10" and cached[0]["revision"] == 2
+    page.once("dialog",lambda dialog: dialog.accept("Puzzle 10"))
+    page.locator(".library-rename").click()
+    assert cloud(page)[saved_id]["revision"] == 2
+    page.locator("#closeManageLibrary").click()
+    context.set_offline(True)
+    page.locator("#openLibrary").click()
+    expect(page.locator("#librarySelect option")).to_contain_text("Puzzle 10")
+    page.locator("#closeLibrary").click()
+    context.set_offline(False)
+    page.locator("#undo").click()
+    expect(page.locator("#puzzleTitle")).to_have_value("Puzzle 10")
+    save(page)
+    assert cloud(page)[saved_id]["revision"] == 3 and cloud(page)[saved_id]["title"] == "Puzzle 10"
+    print("PASS: CJ rename prompt, cancel, name validation, busy controls, metadata-only update, cache, preserved draft, and subsequent Save")
+
+    # Seeing a newer library layout must not advance the loaded editor's stale base revision.
+    page.evaluate("""() => {
+      const records=JSON.parse(localStorage.getItem('test-cloud-puzzles'));
+      Object.values(records)[0].revision=4;Object.values(records)[0].pieces[1].y=2;
+      localStorage.setItem('test-cloud-puzzles',JSON.stringify(records));
+    }""")
+    page.locator("#manageLibrary").click()
+    expect(page.locator("#manageLibraryCard")).to_be_visible()
+    page.once("dialog",lambda dialog: dialog.accept("Remote layout name"))
+    page.locator(".library-rename").click()
+    expect(page.locator("#manageLibraryMessage")).to_contain_text('Renamed puzzle to "Remote layout name"')
+    page.locator("#closeManageLibrary").click()
+    save(page,acknowledge=False)
+    expect(page.locator("#noticeCard")).to_be_visible()
+    expect(page.locator("#noticeMessage")).to_contain_text("changed on another device")
+    assert cloud(page)[saved_id]["revision"] == 5 and cloud(page)[saved_id]["pieces"][1]["y"] == 2
+    page.locator("#closeNotice").click()
+    page.locator("#manageLibrary").click()
+    expect(page.locator("#manageLibraryCard")).to_be_visible()
+    page.evaluate("""() => {
+      const records=JSON.parse(localStorage.getItem('test-cloud-puzzles'));
+      Object.values(records)[0].revision=6;Object.values(records)[0].title='Other device name';
+      localStorage.setItem('test-cloud-puzzles',JSON.stringify(records));
+    }""")
+    page.once("dialog",lambda dialog: dialog.accept("Stale rename"))
+    page.locator(".library-rename").click()
+    expect(page.locator("#noticeCard")).to_be_visible()
+    expect(page.locator("#noticeMessage")).to_contain_text("changed on another device")
+    assert cloud(page)[saved_id]["title"] == "Other device name"
+    page.locator("#closeNotice").click()
+    page.locator("#closeManageLibrary").click()
+    page.locator("#manageLibrary").click()
+    expect(page.locator("#manageLibraryCard")).to_be_visible()
+    for flag,expected in [("testCloudFailure","Network interrupted"),("testCloudDenied","Firebase refused")]:
+        before=cloud(page)
+        page.evaluate(f"window.{flag}=true")
+        page.once("dialog",lambda dialog: dialog.accept("Failed rename"))
+        page.locator(".library-rename").click()
+        expect(page.locator("#noticeCard")).to_be_visible()
+        expect(page.locator("#noticeMessage")).to_contain_text(expected)
+        assert cloud(page) == before
+        page.locator("#closeNotice").click()
+        page.evaluate(f"window.{flag}=false")
+    context.set_offline(True)
+    page.once("dialog",lambda dialog: dialog.accept("Offline rename"))
+    page.locator(".library-rename").click()
+    expect(page.locator("#noticeCard")).to_be_visible()
+    expect(page.locator("#noticeMessage")).to_contain_text("Connect to the internet")
+    assert cloud(page)[saved_id]["title"] == "Other device name"
+    page.locator("#closeNotice").click()
+    context.set_offline(False)
+    page.evaluate("window.testCloudReadDenied=true")
+    page.once("dialog",lambda dialog: dialog.accept("Saved despite refresh failure"))
+    page.locator(".library-rename").click()
+    expect(page.locator("#manageLibraryMessage")).to_contain_text("The name was saved")
+    assert cloud(page)[saved_id]["title"] == "Saved despite refresh failure"
+    assert not errors,errors
+    context.close()
+    print("PASS: rename preserves unseen layout conflicts; stale, offline and failed writes do not rename; refresh failure does not hide confirmed success")
+
+    context,page,errors=load(browser,code="SL",viewport=dict(width=390,height=844))
+    page.locator("#puzzleTitle").fill("Phone puzzle")
+    save(page)
+    page.locator("#manageLibrary").tap()
+    pen=page.locator(".library-rename").bounding_box()
+    remove=page.locator(".library-delete").bounding_box()
+    assert abs(pen["y"]-remove["y"]) < 1 and pen["x"]+pen["width"] <= remove["x"]
+    assert pen["width"] >= 44 and pen["height"] >= 44
+    page.remove_listener("dialog",accept_dialog)
+    page.once("dialog",lambda dialog: dialog.accept("Renamed on phone"))
+    page.locator(".library-rename").tap()
+    expect(page.locator("#manageLibraryList strong")).to_have_text("Renamed on phone")
+    assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+    page.screenshot(path=str(ARTIFACTS / "manage-library-rename-phone.png"))
+    assert not errors,errors
+    context.close()
+    print("PASS: SL touch rename has adjacent pen/delete buttons, large touch targets, and no phone overflow")
     browser.close()

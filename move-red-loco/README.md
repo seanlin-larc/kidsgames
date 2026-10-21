@@ -20,8 +20,12 @@ Open library loads existing puzzles; New puzzle creates a separate layout.
 SL and CJ can Save and use Manage library to delete puzzles. Download archive and Restore archive controls remain SL-only.
 Firestore rules permit SL/CJ puzzle creates and updates, SL/CJ deletion, and family reads.
 In Build, **Manage library** groups saved puzzles into the same five difficulty tiers as the playing-page selector.
-A wide card dialog shows puzzle tiles with names, update times, and **×** delete buttons.
+A wide card dialog shows puzzle tiles with names, update times, and adjacent **✎** rename and **×** delete buttons.
 Phones use two columns. Empty tiers show an empty message. The list scrolls while Done stays below it.
+Select **✎** to edit the saved name. SL and CJ can rename puzzles. Cancel leaves the name unchanged.
+Names must contain 1–80 characters after trimming spaces. Renaming requires internet and checks the current revision.
+Only the name and update metadata change; layouts, creation metadata, and solved status remain intact.
+The library and cached names refresh after success. Renaming does not discard editor layout changes or let stale layouts overwrite newer versions.
 Select **×**, then confirm to delete that puzzle from the family library.
 Cancel keeps the puzzle. Deletion requires internet and checks that the puzzle has not changed since the list loaded.
 Successful deletion refreshes the device's library copy and keeps the current board and device draft.

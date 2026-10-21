@@ -27,6 +27,40 @@ function setup(records=[],code="SL") {
   return {store,docs,get reads(){return reads;},get writes(){return writes;},fail(){fail=true;}};
 }
 
+test("SL and CJ rename only metadata and preserve layout and creation identity",async()=>{
+  for (const code of ["SL","CJ"]) {
+    const s=setup([puzzle()],code), before=structuredClone(s.docs.get("puzzle-1"));
+    assert.deepEqual(await s.store.renamePuzzle({id:"puzzle-1",title:"  Puzzle 12  ",expectedRevision:1}),{id:"puzzle-1",title:"Puzzle 12",revision:2});
+    const after=s.docs.get("puzzle-1");
+    assert.deepEqual(after,{...before,title:"Puzzle 12",revision:2,updatedAt:when,updatedBy:"uid-"+code});
+    assert.equal(s.docs.size,1);assert.equal(s.writes,1);
+  }
+});
+test("rename validates names, IDs and revisions before any writes",async()=>{
+  const s=setup([puzzle()]);
+  for(const change of [{title:""},{title:"   "},{title:"x".repeat(81)},{title:null},{id:"Bad ID"},{expectedRevision:0},{expectedRevision:1.5},{expectedRevision:Number.MAX_SAFE_INTEGER-1}]) {
+    await assert.rejects(s.store.renamePuzzle({id:"puzzle-1",title:"New name",expectedRevision:1,...change}));
+  }
+  assert.equal(s.writes,0);assert.equal(s.docs.get("puzzle-1").title,"First puzzle");
+});
+test("other players cannot rename shared puzzles",async()=>{
+  for(const code of ["YC","JY","Guest",null]) {
+    const s=setup([puzzle()],code);
+    await assert.rejects(s.store.renamePuzzle({id:"puzzle-1",title:"New name",expectedRevision:1}),/Only SL or CJ/);
+    assert.equal(s.writes,0);
+  }
+});
+test("rename cannot overwrite a stale puzzle or recreate a deleted one",async()=>{
+  const s=setup([puzzle("puzzle-1",{revision:2})]);
+  for(const id of ["puzzle-1","deleted-puzzle"]) await assert.rejects(s.store.renamePuzzle({id,title:"New name",expectedRevision:1}),/changed/);
+  assert.equal(s.writes,0);assert.equal(s.docs.size,1);
+});
+test("failed rename does not change the saved puzzle",async()=>{
+  const s=setup([puzzle()]), before=structuredClone(s.docs.get("puzzle-1"));s.fail();
+  await assert.rejects(s.store.renamePuzzle({id:"puzzle-1",title:"New name",expectedRevision:1}),/Network/);
+  assert.deepEqual(s.docs.get("puzzle-1"),before);assert.equal(s.writes,0);
+});
+
 test("archive roundtrip preserves IDs, rotated blocks, labels, colors, revisions, and dates",()=>{
   const records=[puzzle(),puzzle("puzzle-2",{title:"Second puzzle",revision:5})];
   const archive=makeArchive(records,when);

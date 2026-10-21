@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createLibraryStore } from '../../move-red-loco/library-store.js';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, runTransaction, serverTimestamp,
   setDoc, Timestamp, updateDoc } from 'firebase/firestore';
@@ -58,6 +59,23 @@ test('SL update requires next revision and preserves creation identity and date'
   await assertSucceeds(updateDoc(r, { title: 'Changed', revision: 2, updatedAt: serverTimestamp(), updatedBy: 'sean' }));
   await assertSucceeds(updateDoc(ref(dbFor('child')), { revision: 3, updatedAt: serverTimestamp(), updatedBy: 'child' }));
   await assertFails(updateDoc(ref(dbFor('other-child')), { revision: 4, updatedAt: serverTimestamp(), updatedBy: 'other-child' }));
+});
+
+test('CJ metadata-only rename uses the actual adapter transaction and retains puzzle content', async () => {
+  const db=dbFor('child'), target=ref(db);
+  await assertSucceeds(setDoc(ref(dbFor('sean')),data()));
+  const before=(await getDoc(target)).data();
+  const store=createLibraryStore({
+    player:async()=>({uid:'child',code:'CJ'}), timestamp:serverTimestamp,
+    transact:work=>runTransaction(db,tx=>work({
+      get:async id=>{const snap=await tx.get(ref(db,id));return snap.exists()?snap.data():null;},
+      set:(id,value)=>tx.set(ref(db,id),value)
+    }))
+  });
+  await assertSucceeds(store.renamePuzzle({id:'first-train',title:'Renamed by CJ',expectedRevision:1}));
+  const after=(await getDoc(target)).data();
+  assert.equal(after.title,'Renamed by CJ');assert.equal(after.revision,2);assert.equal(after.updatedBy,'child');
+  for(const field of ['format','difficulty','exitRow','pieces','createdBy','createdAt']) assert.deepEqual(after[field],before[field]);
 });
 
 test('SL and CJ can delete library puzzles; other players cannot; unrelated puzzles stay intact', async () => {
