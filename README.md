@@ -25,8 +25,11 @@ kidsgames/
 │   ├── reset-pin.mjs  Sets a new PIN for a player (see admin/README.md)
 │   ├── package.json
 │   └── README.md
-├── move-red-loco/      Puzzle Workshop prototype (linked from the menu)
-│   ├── index.html      7×7 board editor
+├── move-red-loco/      Saved puzzles, playing page, and workshop
+│   ├── play.html       Puzzle selection and playing page (linked from the menu)
+│   ├── player*.js      Playing controls, history, and cloud progress
+│   ├── progress-store.js  Per-player progress and pending sync
+│   ├── index.html      7×7 workshop board editor
 │   ├── editor.js       Drag/drop and local drafts
 │   ├── puzzle-data.js  Shared JSON and device draft validation
 │   ├── library-*.js    Firestore library and JSON archive handling
@@ -62,7 +65,7 @@ kidsgames/
 |-------------|--------|
 | minesweeper | `ms-` (data in `ms-v2`) |
 | word-guess  | `wg-` (data in `wg-v1`, colour theme in `wg-theme`) |
-| move-red-loco | `mrl-` (`mrl-editor-v1:<uid>` local creator drafts, `mrl-theme` per-device Light/Dark/Auto appearance) |
+| move-red-loco | `mrl-` (`mrl-editor-v1:<uid>` local creator drafts, `mrl-library-v1:<uid>` puzzle cache, `mrl-progress-v1:<uid>` solved layouts and pending sync, `mrl-theme` per-device Light/Dark/Auto appearance) |
 | site (shared) | `kg-` (`kg-lastPlayer`, `kg-checkout`, `kg-lock`, `kg-outbox`) |
 
 ## Publish
@@ -82,7 +85,8 @@ Changes go live 1–2 minutes after a push.
   that device for 48 hours (`kg-checkout`). Sign-out ends it. A device clock set back ends it.
 - **Results:** every finished game goes into the device outbox (`kg-outbox`), then to Firestore when
   online. Each record id is also its Firestore document id, so a record sent twice is not copied.
-  Wins also go to the family top 10, `games/{game}/{level}`. All finished games go to `results`.
+  Wins also go to the family top 10, `games/{game}/{level}`. Minesweeper and Word Guess finished games go to `results`.
+  Move The Red Locomotive keeps puzzle completions separately in `puzzleProgress/{uid}/solved`, with its own device sync queue.
 - **Player bar** on every page: player code, ⚠️ Offline icon (with the number of results to send),
   check-out button, sign-out button.
 
@@ -125,3 +129,13 @@ Move The Red Locomotive uses Firestore for its shared puzzle library.
 Cloud controls are enabled after Sean's report of rule publication.
 See [Firebase console steps](firebase/PUZZLE_SETUP.md).
 Device drafts remain available when offline.
+
+## Move The Red Locomotive playing page
+
+The game menu opens `move-red-loco/play.html`.
+Every saved library puzzle appears under its difficulty tier.
+Solved colour and “✓ Solved” apply to the current player's progress.
+The existing `move-red-loco/` URL remains the workshop; SL and CJ see its link in the selector.
+SL and CJ can save and delete shared puzzles. JSON export and archive interface controls remain SL-only.
+Publish the updated website and complete `firebase/firestore.rules` before relying on CJ saving or cloud progress.
+See [the game guide](move-red-loco/README.md) for controls and tests.

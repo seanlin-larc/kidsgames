@@ -5,9 +5,9 @@ const conflict = () => Object.assign(new Error("This puzzle changed on another d
 
 // Adapter injection keeps transaction behavior testable without account credentials.
 export function createLibraryStore(adapter) {
-  async function player(creator = false) {
+  async function player(permission = "read") {
     const p = await adapter.player();
-    if (!p || (creator && p.code !== "SL")) throw Object.assign(new Error("Only SL can change the puzzle library."),{code:"permission-denied"});
+    if (!p || (permission !== "read" && !(["save", "delete"].includes(permission) ? ["SL", "CJ"].includes(p.code) : p.code === "SL"))) throw Object.assign(new Error(["save", "delete"].includes(permission) ? "Only SL or CJ can save or delete library puzzles." : "Only SL can change the puzzle library."),{code:"permission-denied"});
     return p;
   }
   function content(title, layout) {
@@ -24,7 +24,7 @@ export function createLibraryStore(adapter) {
     return records.map(normalizeLibraryPuzzle).sort((a,b)=>a.title.localeCompare(b.title)||a.id.localeCompare(b.id));
   }
   async function savePuzzle({id,title,layout,expectedRevision = 0}) {
-    const p = await player(true);
+    const p = await player("save");
     if (!validPuzzleId(id) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 ||
         expectedRevision >= Number.MAX_SAFE_INTEGER - 1) throw Error("Invalid puzzle ID or revision.");
     const data = content(title, layout);
@@ -38,7 +38,7 @@ export function createLibraryStore(adapter) {
     });
   }
   async function deletePuzzle({id,expectedRevision}) {
-    await player(true);
+    await player("delete");
     if (!validPuzzleId(id) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1 ||
         expectedRevision >= Number.MAX_SAFE_INTEGER) throw Error("Invalid puzzle ID or revision.");
     return adapter.transact(async tx => {
@@ -51,7 +51,7 @@ export function createLibraryStore(adapter) {
     });
   }
   async function restorePuzzles(plan) {
-    const p = await player(true);
+    const p = await player("admin");
     if (!plan || !Array.isArray(plan.entries) || plan.entries.length > MAX_ARCHIVE_PUZZLES) throw Error("Invalid restore plan.");
     // Normalize the entire plan before the first transaction write.
     const entries = plan.entries.map(entry => {

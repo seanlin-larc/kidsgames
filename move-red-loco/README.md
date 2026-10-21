@@ -1,6 +1,6 @@
 # Move The Red Locomotive
 
-**Status (2026-10-18): Puzzle Workshop linked from the game menu, with Build and Play preview. No reviewed puzzle set is bundled.**
+**Status (2026-10-20): The game menu opens the saved-puzzle playing page. The workshop retains its existing URL. Website and rules publication remain separate steps.**
 
 - [Open the Puzzle Workshop](https://seanlin-larc.github.io/kidsgames/move-red-loco/)
 - [Design plan and notes](https://github.com/seanlin-larc/notes-with-llm/blob/main/projects/kidsgame/2026-10-15_move-red-locomotive-plan.md)
@@ -17,14 +17,14 @@ Cloud controls are enabled after Sean's report of rule publication.
 Save keeps a device draft and writes a named puzzle to Firestore when online.
 Each puzzle has a stable ID and a revision.
 Open library loads existing puzzles; New puzzle creates a separate layout.
-Only SL can Save, Manage library, Download archive, or Restore archive through the interface.
-Firestore rules enforce SL-only writes and family reads.
+SL and CJ can Save and use Manage library to delete puzzles. Download archive and Restore archive controls remain SL-only.
+Firestore rules permit SL/CJ puzzle creates and updates, SL/CJ deletion, and family reads.
 In Build, **Manage library** lists saved puzzles with an **×** button beside each entry.
 Select **×**, then confirm to delete that puzzle from the family library.
 Cancel keeps the puzzle. Deletion requires internet and checks that the puzzle has not changed since the list loaded.
 Successful deletion refreshes the device's library copy and keeps the current board and device draft.
 A stale Save cannot silently recreate the deleted puzzle.
-Publish the updated `firebase/firestore.rules` to permit SL-only deletion on the live site.
+Publish the updated `firebase/firestore.rules` to permit SL/CJ deletion on the live site.
 
 Archives contain up to 200 puzzles in one JSON file, with a 2 MB limit.
 The archive excludes account IDs and game statistics.
@@ -37,7 +37,7 @@ The library caches a validated copy for offline reading after an online load.
 
 ## Save and JSON integrity — 2026-10-18
 
-Only **SL** can use Save or Export JSON. Other players see “Only SL can save a puzzle layout.”
+**SL and CJ** can use Save. Only **SL** can use Export JSON. Other players receive a permission message.
 All players can build, import a layout, and use Play preview.
 Existing drafts remain readable for other players, without automatic migration writes.
 This is a device interface restriction. GitHub permissions control repository publication.
@@ -139,14 +139,14 @@ move-red-loco/
 ```
 
 - Shared authentication: `../shared/gate.js`. Login required for any editor access.
-- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v15`.
-- The root game menu links to the workshop. The curated player-facing game is future work.
-- Firestore rules add family puzzle reads and SL-only writes. Workshop game results are not uploaded.
+- Service-worker `PRECACHE` includes the editor assets, with cache version `kidsgames-v18`.
+- The root game menu links to `play.html`. Every saved puzzle is listed; there is no publication or curation flag.
+- Firestore rules allow SL/CJ puzzle saves and SL/CJ deletion. Player completions use private per-account records. Workshop preview does not record completions.
 - Proposed playable-game features, hints, statistics and final rules remain in the design plan.
 
 ## Future work
 
-Confirm target gate geometry and piece inventory. Review UI on a tablet. Create and review original puzzles for the library. Build the playable puzzle view separately.
+Confirm target gate geometry and piece inventory. Review UI on a tablet. Create and review original puzzles for the library. Check live account saving and progress after publication.
 
 
 ## Automated checks
@@ -159,3 +159,52 @@ Physical touch devices and real offline checkout still need acceptance testing.
 Run `node move-red-loco/tests/library.test.mjs` for archive and transaction checks.
 Run `python move-red-loco/tests/browser_library.py` for cloud UI checks with a simulated Firebase SDK.
 Cloud controls are enabled. Real Firebase Save and cross-device restore still need acceptance testing.
+
+## Playing saved puzzles
+
+The menu opens `play.html`. The existing `index.html` remains the workshop.
+The selector groups every saved puzzle under Starter, Beginner, Amateur, Pro, and Freak.
+It uses each saved name, including any number supplied by the creator.
+Incomplete layouts stay visible with an explanation and a disabled Play button.
+No puzzles are hidden behind a ready-to-play flag.
+
+Select a puzzle, then Play. SL and CJ also see Workshop.
+The playing board keeps the saved exit, colours, and piece letters.
+Use mouse drag, touch drag, or select a piece and use arrow keys.
+One valid slide counts as one move, regardless of distance.
+Undo removes a move; Redo restores it. Moving after Undo clears the redo branch.
+Restart restores the starting layout and clears the attempt after confirmation.
+Opening Select Another Puzzle preserves the attempt; starting another puzzle confirms before discarding moves.
+
+A clear exit path completes the puzzle automatically; there is no extra exit move.
+The completion card appears below the board with Replay Moves, Play Again, and Select Another Puzzle.
+Replay restores the final board and does not create another completion.
+A puzzle already clear at the start completes in zero moves; Replay is disabled for its empty history.
+Desktop shows a move sidebar. Phones use an expandable move list.
+Light/Dark/Auto shares the workshop's `mrl-theme` preference.
+
+Progress belongs to the signed-in player, including the shared Guest account.
+Local progress uses `mrl-progress-v1:<uid>` and retains pending completions for later sync from the playing page.
+Cloud completions use `puzzleProgress/{uid}/solved/{puzzleId}-{layoutHash}`.
+Only the owning family account can read or create those records; browser updates and deletes are denied.
+The first completion records its move count. This version does not calculate best scores or add general game statistics.
+Names, tiers, colours, and piece letters do not change the movement layout hash.
+Moving, adding, removing, or reshaping pieces changes it and requires a new solve.
+
+The service worker caches the playing assets for offline use.
+Load the library online before playing offline, and use the existing 48-hour check-out.
+The playing page reports pending progress or failed sync; it does not claim a cloud save before confirmation.
+
+Additional checks from the repository root:
+
+```sh
+node --test move-red-loco/tests/puzzle-data.test.mjs move-red-loco/tests/library.test.mjs move-red-loco/tests/player-state.test.mjs
+python move-red-loco/tests/browser_player.py
+# Requires the documented static server at localhost:8000:
+python move-red-loco/tests/browser_offline.py
+```
+
+The browser suites simulate account identities and cloud responses.
+The offline suite uses the real service worker and disables networking, with a simulated check-out.
+Firestore security checks use the demo emulator, as described in `firebase/PUZZLE_SETUP.md`.
+These checks do not establish publication or real cross-device account acceptance.

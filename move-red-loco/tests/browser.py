@@ -29,6 +29,7 @@ def route_files(route):
         route.fulfill(content_type="text/javascript", body="""
 const player={uid:'uid-'+window.testPlayer,code:window.testPlayer};
 export async function access(){return {mode:'online',player};}
+export const withTimeout=promise=>promise;
 export function mountBar(el){el.textContent='Playing as '+player.code; return {player};}
 export async function enterGame({bar}){document.body.classList.remove('kg-wait');return mountBar(bar);}
 """)
@@ -148,19 +149,19 @@ def run_checks():
         print("PASS: SL Save/export/reload/import, rejection without mutation, worker, drag completion, Replay, board styling")
 
         # All other players get the same card; direct Save-tier events cannot bypass it.
-        for code in ["CJ", "YC", "JY", "Guest"]:
+        for code in ["YC", "JY", "Guest"]:
             legacy = puzzle()
             del legacy["pieces"][1]["hue"]
             context, page, key, errors = load(browser, code=code, saved=legacy)
             original = storage(page)
             for selector in ["#save", '[data-save-tier="Freak"]', "#export"]:
                 page.locator(selector).dispatch_event("click")
-                expect(page.locator("#noticeMessage")).to_have_text("Only SL can save a puzzle layout.")
+                expect(page.locator("#noticeMessage")).to_have_text("Only SL can export or restore puzzle files." if selector == "#export" else "Only SL or CJ can save a puzzle layout.")
                 page.locator("#closeNotice").click()
                 assert storage(page) == original
             assert not errors, errors
             context.close()
-        print("PASS: CJ, YC, JY, Guest cannot Save, directly invoke tier saves, Export, or persist migrations")
+        print("PASS: YC, JY, Guest cannot Save, directly invoke tier saves, Export, or persist migrations")
 
         context, page, key, errors = load(browser, saved=puzzle([RED]), viewport=dict(width=390, height=844))
         page.locator("#playMode").click()
@@ -195,9 +196,13 @@ def run_checks():
         assert not errors, errors
         page.goto(ORIGIN + "/")
         link = page.get_by_role("link", name="Move The Red Locomotive", exact=False)
-        expect(link).to_have_attribute("href", "move-red-loco/")
+        expect(link).to_have_attribute("href", "move-red-loco/play.html")
+        context.route("**/library-config.js", lambda route: route.fulfill(content_type="text/javascript", body="export const LIBRARY_ENABLED=true;"))
+        context.route("**/library-firestore.js", lambda route: route.fulfill(content_type="text/javascript", body="export async function listPuzzles(){return [];}"))
+        context.route("**/player-firestore.js", lambda route: route.fulfill(content_type="text/javascript", body="export async function listCompletions(){return [];}export async function saveCompletion(){}"))
         link.click()
-        expect(page.locator("#board")).to_be_visible()
+        expect(page.locator("#selector")).to_be_visible()
+        expect(page.locator("#libraryStatus")).to_have_text("No puzzles have been saved yet.")
         context.close()
         print("PASS: browser storage rollback and signed-in homepage navigation")
         browser.close()

@@ -75,7 +75,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Shared puzzle library. Players can read; only the server's SL account can change it.
+    // Shared puzzle library. SL and CJ can save and delete.
     // These checks protect metadata and the outer shape. The application validates
     // each block, board bounds, and overlap before saving and after reading.
     function puzzleIdOk(id) {
@@ -97,7 +97,7 @@ service cloud.firestore {
     }
     match /puzzleLibrary/{puzzleId} {
       allow read: if isFamily();
-      allow create: if isFamily() && playerCode() == 'SL'
+      allow create: if isFamily() && playerCode() in ['SL', 'CJ']
         && puzzleIdOk(puzzleId)
         && puzzleShapeOk(request.resource.data)
         && request.resource.data.revision == 1
@@ -105,7 +105,7 @@ service cloud.firestore {
         && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
-      allow update: if isFamily() && playerCode() == 'SL'
+      allow update: if isFamily() && playerCode() in ['SL', 'CJ']
         && puzzleIdOk(puzzleId)
         && puzzleShapeOk(request.resource.data)
         && request.resource.data.createdBy == resource.data.createdBy
@@ -113,7 +113,26 @@ service cloud.firestore {
         && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.updatedAt == request.time;
-      allow delete: if isFamily() && playerCode() == 'SL';
+      allow delete: if isFamily() && playerCode() in ['SL', 'CJ'];
+    }
+
+    // Immutable completions belong to one account and one movement layout.
+    match /puzzleProgress/{uid}/solved/{completionId} {
+      allow read: if isFamily() && request.auth.uid == uid;
+      allow create: if isFamily() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'puzzleId', 'layoutKey', 'moves', 'playedAt', 'date'])
+        && request.resource.data.keys().hasAll(['uid', 'puzzleId', 'layoutKey', 'moves', 'playedAt', 'date'])
+        && request.resource.data.uid == uid
+        && request.resource.data.puzzleId is string
+        && puzzleIdOk(request.resource.data.puzzleId)
+        && request.resource.data.layoutKey is string
+        && request.resource.data.layoutKey.matches('[a-f0-9]{64}')
+        && completionId == request.resource.data.puzzleId + '-' + request.resource.data.layoutKey
+        && request.resource.data.moves is int
+        && request.resource.data.moves >= 0 && request.resource.data.moves < 100000
+        && playedAtOk(request.resource.data)
+        && request.resource.data.date == request.time;
+      allow update, delete: if false;
     }
 
     // Everything else stays locked.

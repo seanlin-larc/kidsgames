@@ -87,7 +87,7 @@ test("stale saves and duplicate creates fail without writes",async()=>{
   for(const expectedRevision of [0,2])await assert.rejects(s.store.savePuzzle({id:"puzzle-1",title:"New name",layout:layout(puzzle()),expectedRevision}),/another device/);
   assert.equal(s.writes,0);assert.equal(s.docs.get("puzzle-1").revision,3);
 });
-for(const code of ["CJ","YC","JY","Guest",null])test("cloud mutations refuse "+code,async()=>{
+for(const code of ["YC","JY","Guest",null])test("cloud mutations refuse "+code,async()=>{
   const s=setup([],code),plan=planRestore(makeArchive([puzzle()],when),[]);
   await assert.rejects(s.store.savePuzzle({id:"puzzle-1",title:"New",layout:layout(puzzle())}),/Only SL/);
   await assert.rejects(s.store.restorePuzzles(plan),/Only SL/);
@@ -166,4 +166,17 @@ test("interrupted deletion retains every puzzle",async()=>{
   const s=setup([puzzle(),puzzle("duplicate")]);s.fail();
   await assert.rejects(s.store.deletePuzzle({id:"duplicate",expectedRevision:1}),/Network/);
   assert.equal(s.docs.size,2);assert.equal(s.writes,0);
+});
+
+test("CJ can create, update and delete puzzles while archive restore remains restricted",async()=>{
+  const s=setup([],"CJ");
+  await s.store.savePuzzle({id:"puzzle-1",title:"CJ puzzle",layout:layout(puzzle())});
+  assert.equal(s.docs.get("puzzle-1").createdBy,"uid-CJ");
+  await s.store.savePuzzle({id:"puzzle-1",title:"CJ update",layout:layout(puzzle()),expectedRevision:1});
+  assert.equal(s.docs.get("puzzle-1").revision,2);
+  await assert.rejects(s.store.savePuzzle({id:"puzzle-1",title:"Stale",layout:layout(puzzle()),expectedRevision:1}),/changed/);
+  await assert.rejects(s.store.deletePuzzle({id:"puzzle-1",expectedRevision:1}),/changed or was deleted/);
+  await s.store.deletePuzzle({id:"puzzle-1",expectedRevision:2});
+  assert.equal(s.docs.has("puzzle-1"),false);
+  await assert.rejects(s.store.restorePuzzles(planRestore(makeArchive([puzzle()],when),[])),/Only SL/);
 });
