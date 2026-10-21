@@ -18,7 +18,7 @@ export async function getDocsFromServer(){
  return {docs:Object.entries(read()).map(([id,data])=>({id,data:()=>fromWire(data)}))};
 }
 export async function runTransaction(db,work){
- if(window.testPlayer!=='SL'||window.testCloudDenied)throw Object.assign(Error('Denied'),{code:'permission-denied'});
+ if(!['SL','CJ'].includes(window.testPlayer)||window.testCloudDenied)throw Object.assign(Error('Denied'),{code:'permission-denied'});
  const staged=[];
  const result=await work({
   get:async ref=>{const data=read()[ref.id];return {exists:()=>!!data,data:()=>fromWire(data)};},
@@ -211,23 +211,44 @@ with sync_playwright() as playwright:
     print("PASS: cloud confirmation remains accurate when the later device copy fails")
 
     context,page,errors=load(browser,code="CJ",viewport=dict(width=390,height=844))
-    expect(page.locator("#manageLibrary")).not_to_be_visible()
-    page.locator("#manageLibrary").dispatch_event("click")
-    expect(page.locator("#manageLibraryCard")).not_to_be_visible()
+    expect(page.locator("#manageLibrary")).to_be_visible()
+    page.locator("#manageLibrary").click()
+    expect(page.locator("#manageLibraryCard")).to_be_visible()
+    page.locator("#closeManageLibrary").click()
     page.locator("#downloadArchive").click()
-    expect(page.locator("#noticeMessage")).to_have_text("Only SL can save a puzzle layout.")
+    expect(page.locator("#noticeMessage")).to_have_text("Only SL can export or restore puzzle files.")
     page.locator("#closeNotice").click()
     page.locator("#restoreArchive").click()
-    expect(page.locator("#noticeMessage")).to_have_text("Only SL can save a puzzle layout.")
+    expect(page.locator("#noticeMessage")).to_have_text("Only SL can export or restore puzzle files.")
     page.locator("#closeNotice").click()
     page.locator("#openLibrary").click()
     expect(page.locator("#libraryMessage")).to_have_text("No puzzles have been saved yet.")
     page.locator("#closeLibrary").click()
     assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+    page.locator("#puzzleTitle").fill("CJ saved puzzle")
+    save(page)
+    assert len(cloud(page)) == 1
+    assert next(iter(cloud(page).values()))["createdBy"] == "uid-CJ"
+    page.locator("#export").click()
+    expect(page.locator("#noticeMessage")).to_have_text("Only SL can export or restore puzzle files.")
+    page.locator("#closeNotice").click()
+    page.locator("#manageLibrary").click()
+    page.locator(".library-delete").click()
+    expect(page.locator("#manageLibraryList li")).to_have_count(0)
+    assert len(cloud(page)) == 0
+    page.locator("#closeManageLibrary").click()
     page.screenshot(path=str(ARTIFACTS / "library-phone.png"))
     assert not errors,errors
     context.close()
-    print("PASS: family read access, SL-only archive controls, and phone layout")
+    print("PASS: CJ saves and confirms deletion on phone; archive controls remain SL-only")
+
+    context,page,errors=load(browser,code="YC")
+    expect(page.locator("#manageLibrary")).not_to_be_visible()
+    page.locator("#manageLibrary").dispatch_event("click")
+    expect(page.locator("#manageLibraryCard")).not_to_be_visible()
+    assert not errors,errors
+    context.close()
+    print("PASS: YC cannot open library deletion controls")
 
     context,page,errors=load(browser)
     page.locator("#puzzleTitle").fill("Duplicate puzzle")
@@ -235,7 +256,7 @@ with sync_playwright() as playwright:
     saved_id=next(iter(cloud(page)))
     page.evaluate("""() => {
       const records=JSON.parse(localStorage.getItem('test-cloud-puzzles'));
-      records['duplicate-puzzle']={...Object.values(records)[0]};
+      records['duplicate-puzzle']={...Object.values(records)[0],difficulty:'Pro'};
       localStorage.setItem('test-cloud-puzzles',JSON.stringify(records));
     }""")
     board_before=page.locator("#board").inner_html()
@@ -243,7 +264,16 @@ with sync_playwright() as playwright:
     expect(page.locator(".left-panel #manageLibrary")).to_be_visible()
     page.locator("#manageLibrary").click()
     expect(page.locator("#manageLibraryList li")).to_have_count(2)
+    assert page.locator("#manageLibraryList h3").all_text_contents() == ["Starter", "Beginner", "Amateur", "Pro", "Freak"]
+    expect(page.locator('[data-tier="Starter"] li')).to_have_count(1)
+    expect(page.locator('[data-tier="Pro"] li')).to_have_count(1)
+    expect(page.locator(".manage-empty")).to_have_count(3)
+    assert page.locator("#manageLibraryCard").bounding_box()["width"] >= 800
     page.screenshot(path=str(ARTIFACTS / "manage-library-desktop.png"))
+    page.emulate_media(color_scheme="dark")
+    expect(page.locator("html")).to_have_attribute("data-theme","dark")
+    page.screenshot(path=str(ARTIFACTS / "manage-library-dark.png"))
+    page.emulate_media(color_scheme="light")
     page.remove_listener("dialog", accept_dialog)
     confirmations=[]
     def cancel_delete(dialog):
@@ -316,11 +346,21 @@ with sync_playwright() as playwright:
     context,page,errors=load(browser,viewport=dict(width=390,height=844))
     page.locator("#puzzleTitle").fill("A duplicate puzzle with a long name for the phone screen")
     save(page)
+    page.evaluate("""() => {
+      const records=JSON.parse(localStorage.getItem('test-cloud-puzzles'));
+      records['second-puzzle']={...Object.values(records)[0],title:'Puzzle 2'};
+      localStorage.setItem('test-cloud-puzzles',JSON.stringify(records));
+    }""")
     page.locator("#manageLibrary").tap()
-    expect(page.locator("#manageLibraryList li")).to_have_count(1)
+    expect(page.locator("#manageLibraryList li")).to_have_count(2)
+    tiles=page.locator("#manageLibraryList li")
+    first,second=tiles.nth(0).bounding_box(),tiles.nth(1).bounding_box()
+    assert abs(first["y"]-second["y"]) < 1 and second["x"] > first["x"]
     assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
     assert page.locator("#manageLibraryList").evaluate("el=>el.scrollWidth<=el.clientWidth")
     page.screenshot(path=str(ARTIFACTS / "manage-library-phone.png"))
+    page.locator(".library-delete").first.tap()
+    expect(page.locator("#manageLibraryList li")).to_have_count(1)
     page.locator(".library-delete").tap()
     expect(page.locator("#manageLibraryList li")).to_have_count(0)
     assert cloud(page)=={}

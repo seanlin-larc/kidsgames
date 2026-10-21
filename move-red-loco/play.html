@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#e5eef7">
+<title>Move The Red Locomotive — Play</title>
+<script>
+try { const mode=localStorage.getItem('mrl-theme'); document.documentElement.dataset.themeSetting=['light','dark'].includes(mode)?mode:'auto'; } catch (_) {}
+document.documentElement.dataset.theme=document.documentElement.dataset.themeSetting==='dark'||(document.documentElement.dataset.themeSetting!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+</script>
+<link rel="stylesheet" href="player.css">
+</head>
+<body class="kg-wait">
+<header>
+  <a href="../" class="back">← Games</a>
+  <h1>Move The Red Locomotive</h1>
+  <div class="header-tools"><button id="themeBtn" type="button">Appearance: Auto</button><span id="playerBar">Checking sign-in…</span></div>
+</header>
+<main id="game">
+  <p id="progressStatus" class="quiet" role="status"></p>
+  <section id="selector" class="card" aria-labelledby="selectorTitle">
+    <div class="section-heading"><h2 id="selectorTitle" tabindex="-1">Choose a puzzle</h2><a id="workshop" class="button" href="./" hidden>Workshop</a></div>
+    <p>Pick a puzzle, then press Play. <span class="solved-key">✓ Solved</span> means you have solved that layout.</p>
+    <p id="libraryStatus" role="status">Loading the family puzzle library…</p>
+    <div id="puzzleTiers"></div>
+    <div class="selector-actions"><button id="play" type="button" disabled>Play</button><button id="refresh" type="button">Refresh puzzles</button><button id="resume" type="button" hidden>Return to current puzzle</button></div>
+  </section>
+  <section id="playing" hidden aria-labelledby="puzzleHeading">
+    <div class="section-heading"><div><p id="tier" class="eyebrow"></p><h2 id="puzzleHeading" tabindex="-1"></h2></div><button id="choose" type="button">Select Another Puzzle</button></div>
+    <div class="play-layout">
+      <div class="board-column">
+        <div class="board-stage">
+          <div id="board" role="group" aria-label="Railway puzzle board"></div>
+          <div class="exit-rail" aria-label="Puzzle exit"><span id="upperExit" class="exit" aria-label="Upper exit"></span><span id="lowerExit" class="exit" aria-label="Lower exit"></span></div>
+        </div>
+        <div class="controls"><button id="restart" type="button">Restart</button><button id="undo" type="button" disabled>Undo</button><button id="redo" type="button" disabled>Redo</button><output id="moveCount" aria-live="polite">Moves: 0</output></div>
+      </div>
+      <details id="movePanel" class="card" open><summary>List of Moves</summary><ol id="moveList"></ol><p id="noMoves" class="quiet">No moves yet.</p></details>
+    </div>
+    <p id="status" role="status">Slide the pieces to clear the red locomotive's exit path.</p>
+    <section id="completion" class="card completion" hidden aria-labelledby="completionTitle">
+      <h2 id="completionTitle" tabindex="-1">Puzzle solved!</h2><p id="completionMessage"></p>
+      <div class="completion-actions"><button id="replay" type="button">Replay Moves</button><button id="again" type="button">Play Again</button><button id="another" type="button">Select Another Puzzle</button></div>
+    </section>
+  </section>
+</main>
+<script type="module" src="player.js"></script>
+</body>
+</html>

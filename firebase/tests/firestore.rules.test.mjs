@@ -26,15 +26,17 @@ beforeEach(async () => {
   await env.withSecurityRulesDisabled(async ctx => {
     await setDoc(doc(ctx.firestore(), 'players', 'sean'), { code: 'SL' });
     await setDoc(doc(ctx.firestore(), 'players', 'child'), { code: 'CJ' });
+    await setDoc(doc(ctx.firestore(), 'players', 'other-child'), { code: 'YC' });
   });
 });
 after(async () => { await env?.cleanup(); });
 
-test('only SL can create; family can read and list; outsiders cannot read', async () => {
+test('SL and CJ can create; family can read and list; outsiders cannot read', async () => {
   await assertSucceeds(setDoc(ref(dbFor('sean')), data()));
   await assertSucceeds(getDoc(ref(dbFor('child'))));
   assert.equal((await assertSucceeds(getDocs(collection(dbFor('child'), 'puzzleLibrary')))).size, 1);
-  for (const uid of [null, 'outsider', 'child']) {
+  await assertSucceeds(setDoc(ref(dbFor('child'), 'cj-puzzle'), data({createdBy:'child',updatedBy:'child'})));
+  for (const uid of [null, 'outsider', 'other-child']) {
     await assertFails(setDoc(ref(dbFor(uid), 'blocked'), data({ createdBy: uid, updatedBy: uid })));
   }
   for (const uid of [null, 'outsider']) {
@@ -54,19 +56,23 @@ test('SL update requires next revision and preserves creation identity and date'
     await assertFails(updateDoc(r, { revision: 2, updatedAt: serverTimestamp(), updatedBy: 'sean', ...patch }));
   }
   await assertSucceeds(updateDoc(r, { title: 'Changed', revision: 2, updatedAt: serverTimestamp(), updatedBy: 'sean' }));
-  await assertFails(updateDoc(ref(dbFor('child')), { revision: 3, updatedAt: serverTimestamp(), updatedBy: 'child' }));
+  await assertSucceeds(updateDoc(ref(dbFor('child')), { revision: 3, updatedAt: serverTimestamp(), updatedBy: 'child' }));
+  await assertFails(updateDoc(ref(dbFor('other-child')), { revision: 4, updatedAt: serverTimestamp(), updatedBy: 'other-child' }));
 });
 
-test('only SL can delete library puzzles; other puzzles and statistics stay intact', async () => {
+test('SL and CJ can delete library puzzles; other players cannot; unrelated puzzles stay intact', async () => {
   const db = dbFor('sean');
   await assertSucceeds(setDoc(ref(db), data()));
   await assertSucceeds(setDoc(ref(db, 'keep-this'), data()));
-  for (const uid of [null, 'outsider', 'child']) {
+  for (const uid of [null, 'outsider', 'other-child']) {
     await assertFails(deleteDoc(ref(dbFor(uid))));
   }
   assert.equal((await getDoc(ref(db))).exists(), true);
   await assertSucceeds(deleteDoc(ref(db)));
   assert.equal((await getDoc(ref(db))).exists(), false);
+  await assertSucceeds(setDoc(ref(db, 'cj-delete'), data()));
+  await assertSucceeds(deleteDoc(ref(dbFor('child'), 'cj-delete')));
+  assert.equal((await getDoc(ref(db, 'cj-delete'))).exists(), false);
   assert.equal((await getDoc(ref(db, 'keep-this'))).exists(), true);
 });
 
@@ -121,4 +127,28 @@ test('existing statistics rules still allow valid family records and reject muta
   await assertFails(setDoc(doc(db, 'games', 'minesweeper', 'l8', 'too-fast'), { ...base, time: 1 }));
   await assertFails(updateDoc(win, { time: 3 }));
   await assertFails(deleteDoc(win));
+});
+
+
+test('puzzle completions are private, immutable, validated, and owned by the signed-in player', async () => {
+  const hash='a'.repeat(64), id='first-train-'+hash;
+  const record={uid:'child',puzzleId:'first-train',layoutKey:hash,moves:2,playedAt:Timestamp.now(),date:serverTimestamp()};
+  const progress=(who,owner='child',key=id)=>doc(dbFor(who),'puzzleProgress',owner,'solved',key);
+  await assertSucceeds(setDoc(progress('child'),record));
+  await assertSucceeds(getDoc(progress('child')));
+  assert.equal((await assertSucceeds(getDocs(collection(dbFor('child'),'puzzleProgress','child','solved')))).size,1);
+  for(const who of ['sean','other-child','outsider',null]) {
+    await assertFails(getDoc(progress(who)));
+    await assertFails(getDocs(collection(dbFor(who),'puzzleProgress','child','solved')));
+    await assertFails(setDoc(progress(who,'child','second-train-'+hash),{...record,puzzleId:'second-train'}));
+  }
+  await assertFails(updateDoc(progress('child'),{moves:1}));
+  await assertFails(deleteDoc(progress('child')));
+  for(const patch of [{uid:'sean'},{moves:-1},{moves:1.5},{moves:100000},{layoutKey:'bad'},
+    {extra:true},{date:Timestamp.fromMillis(0)},{playedAt:Timestamp.fromMillis(0)}]) {
+    await assertFails(setDoc(progress('child','child','second-train-'+hash),{...record,puzzleId:'second-train',...patch}));
+  }
+  await assertFails(setDoc(progress('child','child','wrong-id'),{...record}));
+  const missing={...record};delete missing.moves;
+  await assertFails(setDoc(progress('child','child','second-train-'+hash),missing));
 });

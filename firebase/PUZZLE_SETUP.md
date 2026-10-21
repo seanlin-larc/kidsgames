@@ -2,14 +2,14 @@
 
 The puzzle library uses the existing Cloud Firestore database in `kidsgame-7a262`.
 It stores one document per puzzle in `puzzleLibrary`.
-SL can save, restore, and delete puzzles.
+SL and CJ can save and delete puzzles. Archive interface controls remain SL-only.
 Approved family players can read puzzles.
 
 ## Activation status
 
-Sean replied “publish.” after the request to confirm rule publication.
-ChatGPT treated that reply as confirmation and enabled the cloud controls.
-The prepared site cache is `kidsgames-v17`.
+Sean reports publishing the updated complete rules, including SL/CJ deletion and private progress.
+The agent did not independently inspect the deployed rules. Cloud controls are enabled.
+The prepared site cache is `kidsgames-v18`.
 The live Firebase rules were not inspected directly.
 Real Firebase Save and restore still need the check below.
 
@@ -26,10 +26,11 @@ Real Firebase Save and restore still need the check below.
 9. Tell ChatGPT that the rules are published.
 
 The prepared file includes the existing player, Minesweeper, and statistics rules.
-The new block adds `puzzleLibrary` permissions.
+The updated rules include `puzzleLibrary` permissions and private player completion records.
 Do not replace the whole ruleset with only that new block.
 
-The application uses `players/{uid}.code == "SL"` to identify the creator on the server.
+The server permits puzzle creates and updates when `players/{uid}.code` is `SL` or `CJ`.
+Both `SL` and `CJ` can delete library puzzles.
 The existing player documents are maintained through the console.
 Browser clients cannot change those documents.
 No UID needs to be copied into the game code.
@@ -77,7 +78,7 @@ Saving a loaded puzzle updates its existing document.
 ### Manage library and delete duplicates
 
 Publish the updated complete `firebase/firestore.rules` file before using deletion on the live site.
-Earlier rules reject all puzzle deletions. The updated rule permits only SL to delete library documents.
+Earlier rules reject all puzzle deletions. The updated rule permits SL and CJ to delete library documents.
 Player records and game statistics keep their existing protections.
 
 1. Sign in as SL and select Build in the workshop.
@@ -121,11 +122,11 @@ Archive download, restore, and library management always require a server connec
 ## Verification boundary
 
 Local app tests simulate family identities and Firestore SDK responses.
-All seven Firestore emulator tests pass, including SL-only deletion and the 200-document restore transaction.
-All 67 unit cases and both Chromium suites pass, including confirmed deletion, cancellation, errors, and phone touch controls.
-Rule publication is based on Sean's earlier reply; the new deletion rule has not been published by this change.
+All eight Firestore emulator tests pass, including SL/CJ saving, SL/CJ deletion, private progress, and the 200-document restore transaction.
+The unit and browser suites cover the workshop, playing page, progress, and phone touch controls.
+Sean reports publishing the complete updated rules. The agent has not independently matched the deployed source.
 Existing player and statistics rule text was checked against the repository and remains unchanged.
-These tests do not establish that the console rules were published.
+These tests validate the local rules and application behaviour; they do not establish live account behaviour.
 Real Firebase saving and cross-device restoration still need the activation check above.
 
 ## Sources
@@ -134,3 +135,37 @@ Real Firebase saving and cross-device restoration still need the activation chec
 - [Firebase: get document data](https://firebase.google.com/docs/firestore/query-data/get-data)
 - [Firebase: transactions](https://firebase.google.com/docs/firestore/manage-data/transactions)
 - [Firebase: Firestore pricing and quotas](https://firebase.google.com/docs/firestore/pricing)
+
+## Enable CJ saving, deletion, and player progress
+
+No new account, PIN, role document, or service-account key is needed for CJ.
+Keep CJ's existing `players/{uid}` document with `code: "CJ"`.
+The updated workshop and library adapter accept SL and CJ for Save.
+The complete updated rules permit those two codes to create and update puzzles.
+They permit SL/CJ deletion and keep player mappings immutable.
+Archive and JSON export interface controls remain SL-only.
+
+Publish both the updated website and the complete updated `firestore.rules`.
+For rules, use Firestore Database → Rules, replace the editor with the complete reviewed file, then Publish.
+If these changes are still local, use the local file; the raw main-branch link above contains the published repository version.
+Do not change CJ's player code to SL.
+
+The new `puzzleProgress/{uid}/solved` collection stores immutable completions for that account.
+Only its owner can read or create records. Other players, including SL, cannot read another account's progress through the application.
+Each record identifies the puzzle and its movement layout, so a renamed puzzle stays solved.
+Offline completions stay pending on that device until the playing page syncs online.
+
+After publication, sign in as CJ and open Workshop from the puzzle selector.
+Save a named puzzle, reopen the library, and verify its contents.
+Use Manage library → × → Confirm to delete a temporary puzzle as CJ.
+Solve a puzzle, then check its solved badge on another device signed into the same account.
+Live acceptance remains separate from emulator and simulated-browser results.
+
+For local emulator tests, the tracked npm command has a configuration path error with firebase-tools 14.21.0.
+Use the environment's external configuration override without editing production data:
+
+```sh
+source /workspace/.onboarding/env.sh
+cd /workspace/.onboarding
+/workspace/kidsgames/firebase/node_modules/.bin/firebase emulators:exec --project demo-kidsgames --only firestore --config /workspace/.onboarding-firebase.json 'cd /workspace/kidsgames/firebase && node --test tests/firestore.rules.test.mjs'
+```

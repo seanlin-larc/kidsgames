@@ -473,7 +473,7 @@ function render() {
   $("libraryTools").hidden = !LIBRARY_ENABLED;
   $("puzzleNameLabel").hidden = !LIBRARY_ENABLED;
   $("librarySetup").hidden = LIBRARY_ENABLED;
-  $("manageLibrary").hidden = !LIBRARY_ENABLED || playerContext?.player.code !== "SL" || mode !== "build";
+  $("manageLibrary").hidden = !LIBRARY_ENABLED || !["SL", "CJ"].includes(playerContext?.player.code) || mode !== "build";
   $("manageLibrary").disabled = libraryBusy;
   document.querySelectorAll("#manageLibraryCard button").forEach(el=>el.disabled=libraryBusy);
   $("puzzleTitle").disabled = libraryBusy || mode === "play";
@@ -902,10 +902,10 @@ function showNotice(title, message) {
   if (!$("noticeCard").open) $("noticeCard").showModal();
 }
 $("closeNotice").addEventListener("click", () => $("noticeCard").close());
-function requireCreator() {
-  if (playerContext?.player.code === "SL") return true;
+function requireCreator(save = false) {
+  if (playerContext?.player.code === "SL" || (save && playerContext?.player.code === "CJ")) return true;
   closeSaveMenu();
-  showNotice("Save puzzle layout", "Only SL can save a puzzle layout.");
+  showNotice("Save puzzle layout", save ? "Only SL or CJ can save a puzzle layout." : "Only SL can export or restore puzzle files.");
   return false;
 }
 function closeSaveMenu() {
@@ -913,7 +913,7 @@ function closeSaveMenu() {
   $("save").setAttribute("aria-expanded","false");
 }
 $("save").addEventListener("click",()=>{
-  if (mode !== "build" || !requireCreator()) return;
+  if (mode !== "build" || !requireCreator(true)) return;
   const willOpen = $("saveMenu").hidden;
   $("saveMenu").hidden = !willOpen;
   $("save").setAttribute("aria-expanded",String(willOpen));
@@ -922,7 +922,7 @@ document.addEventListener("pointerdown", event=>{
   if (!event.target.closest("#saveBox")) closeSaveMenu();
 });
 document.querySelectorAll("[data-save-tier]").forEach(btn=>btn.addEventListener("click",async()=>{
-  if (mode !== "build" || libraryBusy || !requireCreator() || !storageKey) return;
+  if (mode !== "build" || libraryBusy || !requireCreator(true) || !storageKey) return;
   const tier = btn.dataset.saveTier;
   if (!TIERS.includes(tier)) return;
   try {
@@ -1047,24 +1047,38 @@ $("openLibrary").addEventListener("click",()=>{
 $("closeLibrary").addEventListener("click",()=>$("libraryCard").close());
 function renderManagedLibrary(message) {
   const list=$("manageLibraryList");list.replaceChildren();
-  for (const puzzle of libraryEntries) {
-    const row=document.createElement("li"), entry=document.createElement("div");
-    entry.className="manage-entry";
-    const title=document.createElement("strong"), details=document.createElement("small");
-    title.textContent=puzzle.title;
-    details.textContent=puzzle.difficulty+" · Updated "+new Date(puzzle.updatedAt).toLocaleString();
-    entry.append(title,details);
-    const remove=document.createElement("button");
-    remove.type="button";remove.className="action library-delete";remove.textContent="×";
-    remove.dataset.puzzleId=puzzle.id;remove.setAttribute("aria-label","Delete "+puzzle.title);
-    remove.addEventListener("click",()=>{void deleteLibraryPuzzle(puzzle);});
-    row.append(entry,remove);list.appendChild(row);
+  for (const [index,tier] of TIERS.entries()) {
+    const section=document.createElement("section"), heading=document.createElement("h3");
+    section.className="manage-tier";section.dataset.tier=tier;
+    heading.id="manage-tier-"+index;heading.textContent=tier;
+    section.setAttribute("aria-labelledby",heading.id);section.appendChild(heading);
+    const grid=document.createElement("ul");grid.className="manage-grid";
+    const entries=libraryEntries.filter(puzzle=>puzzle.difficulty===tier)
+      .sort((a,b)=>a.title.localeCompare(b.title,undefined,{numeric:true})||a.id.localeCompare(b.id));
+    if (!entries.length) {
+      const empty=document.createElement("div");empty.className="manage-empty";
+      empty.textContent="No saved puzzles in this tier.";section.appendChild(empty);
+    }
+    for (const puzzle of entries) {
+      const row=document.createElement("li"), entry=document.createElement("div");
+      entry.className="manage-entry";
+      const title=document.createElement("strong"), details=document.createElement("small");
+      title.textContent=puzzle.title;
+      details.textContent="Updated "+new Date(puzzle.updatedAt).toLocaleString();
+      entry.append(title,details);
+      const remove=document.createElement("button");
+      remove.type="button";remove.className="action library-delete";remove.textContent="×";
+      remove.dataset.puzzleId=puzzle.id;remove.setAttribute("aria-label","Delete "+puzzle.title);
+      remove.addEventListener("click",()=>{void deleteLibraryPuzzle(puzzle);});
+      row.append(entry,remove);grid.appendChild(row);
+    }
+    section.appendChild(grid);list.appendChild(section);
   }
   $("manageLibraryMessage").textContent=(message ? message+"\n" : "")+
     (libraryEntries.length ? "Select × beside a puzzle to delete it." : "No puzzles have been saved yet.");
 }
 async function deleteLibraryPuzzle(puzzle) {
-  if (libraryBusy || mode!=="build" || playerContext?.player.code!=="SL") return;
+  if (libraryBusy || mode!=="build" || !["SL", "CJ"].includes(playerContext?.player.code)) return;
   if (!confirm('Delete "'+puzzle.title+'" from the family library? This cannot be undone.')) return;
   const deleted=await libraryTask(async()=>{
     await (await cloudStore()).deletePuzzle({id:puzzle.id,expectedRevision:puzzle.revision});
@@ -1078,7 +1092,7 @@ async function deleteLibraryPuzzle(puzzle) {
   if (deleted) ($("manageLibraryList").querySelector("button")||$("closeManageLibrary")).focus();
 }
 $("manageLibrary").addEventListener("click",()=>{
-  if (!LIBRARY_ENABLED || mode!=="build" || libraryBusy || playerContext?.player.code!=="SL") return;
+  if (!LIBRARY_ENABLED || mode!=="build" || libraryBusy || !["SL", "CJ"].includes(playerContext?.player.code)) return;
   void libraryTask(async()=>{
     libraryEntries=await (await cloudStore()).listPuzzles();
     cacheLibrary(libraryEntries);renderManagedLibrary();$("manageLibraryCard").showModal();
@@ -1166,8 +1180,8 @@ if (ctx) {
       $("puzzleTitle").value=typeof saved.title==="string" && saved.title.length<=80 ? saved.title : "Untitled puzzle";
       nextId=nextPieceId(pieces);
       status("Restored locally saved draft for " + ctx.player.code + ".");
-      // Only SL may persist migrations. Other players can still read their old drafts.
-      if (ctx.player.code === "SL" &&
+      // SL and CJ may persist migrations. Other players can still read their old drafts.
+      if (["SL", "CJ"].includes(ctx.player.code) &&
           (saved.difficulty !== difficulty || saved.exitRow !== exitRow ||
            JSON.stringify(saved.pieces) !== JSON.stringify(pieces))) {
         try {
@@ -1177,7 +1191,7 @@ if (ctx) {
       }
     }
   } catch(error) { status("Could not restore saved draft. The saved data was kept. Import a valid JSON file."); }
-  if (ctx.player.code === "SL") {
+  if (["SL", "CJ"].includes(ctx.player.code)) {
     try { migrateTierSlots(storageKey); } catch (_) { /* Keep valid drafts usable if device storage is unavailable. */ }
   }
   render();
