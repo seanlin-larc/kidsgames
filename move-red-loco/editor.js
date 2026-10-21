@@ -1047,18 +1047,32 @@ $("openLibrary").addEventListener("click",()=>{
 $("closeLibrary").addEventListener("click",()=>$("libraryCard").close());
 function renderManagedLibrary(message) {
   const list=$("manageLibraryList");list.replaceChildren();
-  for (const puzzle of libraryEntries) {
-    const row=document.createElement("li"), entry=document.createElement("div");
-    entry.className="manage-entry";
-    const title=document.createElement("strong"), details=document.createElement("small");
-    title.textContent=puzzle.title;
-    details.textContent=puzzle.difficulty+" · Updated "+new Date(puzzle.updatedAt).toLocaleString();
-    entry.append(title,details);
-    const remove=document.createElement("button");
-    remove.type="button";remove.className="action library-delete";remove.textContent="×";
-    remove.dataset.puzzleId=puzzle.id;remove.setAttribute("aria-label","Delete "+puzzle.title);
-    remove.addEventListener("click",()=>{void deleteLibraryPuzzle(puzzle);});
-    row.append(entry,remove);list.appendChild(row);
+  for (const [index,tier] of TIERS.entries()) {
+    const section=document.createElement("section"), heading=document.createElement("h3");
+    section.className="manage-tier";section.dataset.tier=tier;
+    heading.id="manage-tier-"+index;heading.textContent=tier;
+    section.setAttribute("aria-labelledby",heading.id);section.appendChild(heading);
+    const grid=document.createElement("ul");grid.className="manage-grid";
+    const entries=libraryEntries.filter(puzzle=>puzzle.difficulty===tier)
+      .sort((a,b)=>a.title.localeCompare(b.title,undefined,{numeric:true})||a.id.localeCompare(b.id));
+    if (!entries.length) {
+      const empty=document.createElement("div");empty.className="manage-empty";
+      empty.textContent="No saved puzzles in this tier.";section.appendChild(empty);
+    }
+    for (const puzzle of entries) {
+      const row=document.createElement("li"), entry=document.createElement("div");
+      entry.className="manage-entry";
+      const title=document.createElement("strong"), details=document.createElement("small");
+      title.textContent=puzzle.title;
+      details.textContent="Updated "+new Date(puzzle.updatedAt).toLocaleString();
+      entry.append(title,details);
+      const remove=document.createElement("button");
+      remove.type="button";remove.className="action library-delete";remove.textContent="×";
+      remove.dataset.puzzleId=puzzle.id;remove.setAttribute("aria-label","Delete "+puzzle.title);
+      remove.addEventListener("click",()=>{void deleteLibraryPuzzle(puzzle);});
+      row.append(entry,remove);grid.appendChild(row);
+    }
+    section.appendChild(grid);list.appendChild(section);
   }
   $("manageLibraryMessage").textContent=(message ? message+"\n" : "")+
     (libraryEntries.length ? "Select × beside a puzzle to delete it." : "No puzzles have been saved yet.");

@@ -19,7 +19,9 @@ Each puzzle has a stable ID and a revision.
 Open library loads existing puzzles; New puzzle creates a separate layout.
 SL and CJ can Save and use Manage library to delete puzzles. Download archive and Restore archive controls remain SL-only.
 Firestore rules permit SL/CJ puzzle creates and updates, SL/CJ deletion, and family reads.
-In Build, **Manage library** lists saved puzzles with an **×** button beside each entry.
+In Build, **Manage library** groups saved puzzles into the same five difficulty tiers as the playing-page selector.
+A wide card dialog shows puzzle tiles with names, update times, and **×** delete buttons.
+Phones use two columns. Empty tiers show an empty message. The list scrolls while Done stays below it.
 Select **×**, then confirm to delete that puzzle from the family library.
 Cancel keeps the puzzle. Deletion requires internet and checks that the puzzle has not changed since the list loaded.
 Successful deletion refreshes the device's library copy and keeps the current board and device draft.
