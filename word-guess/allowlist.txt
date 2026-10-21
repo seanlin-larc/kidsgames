@@ -1,0 +1,15 @@
+# Real words that Word Guess accepts as guesses although lemminflect and WordNet
+# do not know them (mostly small words such as "because", and newer words).
+# Claude chose them by hand on 2026-10-21 from the common words that the
+# 2026-10-21 rule dropped. One or more words per line. Lines that start with # are comments.
+because during against until among cannot towards toward unless whereas versus
+amongst albeit beside circa amidst oneself shalt
+gonna wanna gotta gotcha betcha
+texting texted remix remixes remixed repost offline inbox admin admins hoodie hoodies
+cutie thingy girly girlie merch footy flirty quinoa sensei kanji chakra chakras paleo
+creme undead genomic gamers stats turbo hydro recon carer carers artsy prepped rebrand
+tween kimchi subtext subtype spacer spacers onsite offsite eyewear woohoo toasty
+manmade dorky saggy chipset modded snark inkjet retest rebar infill clicker getter
+enabler unmet amped maxed funder funders decider beachy bendy twitchy rotator chiral
+mythos karmic kabuki macular manga katana cantina kraken grinch
+emoji emojis selfie selfies hashtag vlogs vlogger

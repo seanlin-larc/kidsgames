@@ -44,6 +44,7 @@ kidsgames/
     ├── words.js       Word lists (made by build-words.py, do not edit by hand)
     ├── build-words.py Makes words.js from public word-frequency data
     ├── blocklist.txt  Words never used as answers or accepted as guesses
+    ├── allowlist.txt  Real words accepted as guesses that the word sources miss ("because", "selfie")
     └── tests/browser.py  Browser checks for the dictionary card (python word-guess/tests/browser.py)
 ```
 

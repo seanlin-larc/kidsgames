@@ -1,7 +1,8 @@
 # Words that Word Guess never uses as an answer and never accepts as a guess.
-# Rude, sexual, slur, drug, and adult words; and names, brands, and prefixes
-# that the frequency list keeps by mistake. One or more words per line.
-# Lines that start with # are comments.
+# One or more words per line. Lines that start with # are comments.
+#
+# Rude, sexual, slur, drug, and adult words. From 2026-10-21, guesses are also
+# blocked in their other forms ("bitches", "wankers").
 bitch bitchy boner booze butch fanny horny kinky penis pubic pussy semen sperm whore
 queer gypsy lynch sissy moron spank thong fecal feces opium harem welch randy
 bugger condom crappy crotch douche erotic faggot fetish heroin herpes hooker incest
@@ -9,6 +10,14 @@ libido nipple orgasm rapist retard sexism sexist sexual vagina wiener stoner jun
 nudity cervix uterus seduce psycho midget salaam
 arousal bastard bondage brothel cocaine ecstasy erotica genital jackass lesbian obscene
 pervert sensual topless vaginal uterine suicide satanic bipolar drugged
+# Added 2026-10-21: rude words and slurs that WordNet lets in as guesses.
+asshole nigga nigra shite shitty fuckup dogshit wanker skank skanky porno busty sexpot
+fellate nookie bimbo hymie honkey whitey redneck cocain spliff unsexy cissy
+spic wank effed effing falsies commie schmuck shmuck
+
+# EXACT
+# Names, brands, and prefixes that the frequency list keeps by mistake. These
+# block only the exact word: "harry" is blocked, "harried" is not.
 billy bobby harry jimmy peter terry sally homer tudor aries capri chile xerox yahoo tesla
 welsh calif multi quasi christ dalton dexter mickey morgan martin surrey google currie
 oxford cornish doppler pullman magneto hackney midwest cyclops marxism marxist
