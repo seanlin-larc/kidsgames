@@ -40,7 +40,8 @@ kidsgames/
     ├── index.html     The game
     ├── words.js       Word lists (made by build-words.py, do not edit by hand)
     ├── build-words.py Makes words.js from public word-frequency data
-    └── blocklist.txt  Words never used as answers or accepted as guesses
+    ├── blocklist.txt  Words never used as answers or accepted as guesses
+    └── tests/browser.py  Browser checks for the dictionary card (python word-guess/tests/browser.py)
 ```
 
 ## Rules for a new game

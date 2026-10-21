@@ -75,8 +75,8 @@ a{color:var(--accent)}
 .tile.hit{background:var(--hit);border-color:var(--hit);color:var(--tile-text)}
 .tile.near{background:var(--near);border-color:var(--near);color:var(--tile-text)}
 .tile.miss{background:var(--miss);border-color:var(--miss);color:var(--tile-text)}
-.book{width:var(--book);height:var(--book);display:flex;align-items:center;justify-content:center;
-  font-size:1.35rem;text-decoration:none;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+.book{width:var(--book);height:var(--book);display:flex;align-items:center;justify-content:center;padding:0;
+  font:inherit;font-size:1.35rem;border-radius:8px;border:1px solid var(--line);background:var(--panel);cursor:pointer}
 .book.off{visibility:hidden}
 
 /* ---------- message and end panel ---------- */
@@ -86,7 +86,7 @@ a{color:var(--accent)}
   text-align:center}
 #end p{margin:0 0 8px}
 #endWord{font-size:1.5rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
-#endWord a.book{display:inline-flex;vertical-align:middle;letter-spacing:0;margin-left:10px}
+#endWord .book{display:inline-flex;vertical-align:middle;letter-spacing:0;margin-left:10px}
 
 /* ---------- on-page keyboard (the only input) ---------- */
 .kb{display:grid;gap:6px;touch-action:manipulation}
@@ -115,6 +115,16 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
 .bar{background:var(--miss);color:#fff;text-align:right;padding:1px 6px;border-radius:3px;min-width:22px;font-weight:700}
 .bar.now{background:var(--hit)}
 .note{font-size:.8rem;color:var(--muted);margin-top:10px}
+
+/* ---------- dictionary card (WordWeb Online in a frame) ----------
+   The frame starts --crop px above the card, so WordWeb's search box (16-62 px from the
+   top of its pages, at all card widths) stays out of view. The frame scrolls inside the card. */
+#dictDlg{height:min(640px, calc(100vh - 32px))}
+#dictDlg[open]{display:flex;flex-direction:column}
+.dict{--crop:80px;position:relative;flex:1;overflow:hidden;background:#ffffff;border-radius:0 0 12px 12px}
+.dict iframe{position:absolute;left:0;top:calc(-1 * var(--crop));width:100%;height:calc(100% + var(--crop));border:0}
+#dictMsg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;
+  text-align:center;color:#6b7280;background:#ffffff;margin:0}
 </style>
 </head>
 <body class="kg-wait">
@@ -162,6 +172,18 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   <div class="dbody" id="statsBody"></div>
 </dialog>
 
+<dialog id="dictDlg" aria-labelledby="dictTitle">
+  <div class="dhead">
+    <h2 id="dictTitle"></h2>
+    <button type="button" class="btn" id="dictClose">Close</button>
+  </div>
+  <div class="dict">
+    <!-- sandbox="" (nothing allowed): no WordWeb scripts, forms, pop-ups or new tabs -->
+    <iframe id="dictFrame" sandbox="" referrerpolicy="no-referrer" title="Dictionary" src="about:blank"></iframe>
+    <p id="dictMsg"></p>
+  </div>
+</dialog>
+
 <script src="words.js"></script>
 <script type="module">
 /* ==========================================================
@@ -171,14 +193,15 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
    - Input is only the on-page keyboard (Sean's rule).
    - "Today" = one word a day per length, same for the whole family.
      "Practice" = a new random word each game.
-   - The book button opens the word in the Cambridge Dictionary.
+   - The book button shows the word from WordWeb Online in a card on this page.
    ========================================================== */
 const TRIES = 6;
 const SHOWN = { 5: 0, 6: 1, 7: 2 };              // letters revealed at the start
 const STORE_KEY = 'wg-v1';                       // all saved data for this game
 const DAY0 = Date.UTC(2026, 0, 1);               // day 0 of the daily words
 // Inflected guesses ("boxes") open their dictionary entry ("box"); BASE is filled below.
-const dictUrl = w => 'https://dictionary.cambridge.org/dictionary/english/' + encodeURIComponent(BASE[w] || w);
+// WordWeb finds entries only by uppercase address: /en/BOX works, /en/box and /en/BOXES show its home page.
+const dictUrl = w => 'https://www.wordwebonline.com/en/' + encodeURIComponent((BASE[w] || w).toUpperCase());
 
 const $ = id => document.getElementById(id);
 const ANSWERS = {}, VALID = {}, BASE = {};
@@ -332,12 +355,13 @@ function finish(won) {
 function setMsg(text, bad) { $('msg').textContent = text; $('msg').className = bad ? 'bad' : ''; }
 
 function bookLink(word) {
-  const a = document.createElement('a');
-  a.className = 'book'; a.href = dictUrl(word); a.target = '_blank'; a.rel = 'noopener';
-  a.textContent = '📖';
-  a.title = 'Look up "' + word + '" in the Cambridge Dictionary';
-  a.setAttribute('aria-label', a.title);
-  return a;
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'book';
+  b.textContent = '📖';
+  b.title = 'Look up "' + word + '" in the dictionary';
+  b.setAttribute('aria-label', b.title);
+  b.addEventListener('click', () => showDict(word));
+  return b;
 }
 
 function renderBoard() {
@@ -425,6 +449,25 @@ function showStats() {
   $('statsDlg').showModal();
 }
 const card = (v, t) => '<div class="card"><b>' + v + '</b><span>' + t + '</span></div>';
+
+/* ---------- dictionary card ----------
+   Shows WordWeb Online in a frame. Words that WordWeb does not know show its home page.
+   Offline (for example, a check-out) shows a message: the dictionary needs the internet. */
+function showDict(word) {
+  const frame = $('dictFrame'), msg = $('dictMsg');
+  const offline = navigator.onLine === false || (window.wgCtx && !wgCtx.online());
+  $('dictTitle').textContent = '📖 ' + word;
+  msg.textContent = offline ? 'The dictionary needs the internet. Look up this word when you are online.' : 'Loading…';
+  msg.hidden = false;
+  if (!offline) frame.src = dictUrl(word);
+  $('dictDlg').showModal();
+}
+$('dictFrame').addEventListener('load', e => {
+  if (e.target.getAttribute('src') !== 'about:blank') $('dictMsg').hidden = true;
+});
+$('dictClose').addEventListener('click', () => $('dictDlg').close());
+$('dictDlg').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });  // tap outside the card
+$('dictDlg').addEventListener('close', () => { $('dictFrame').src = 'about:blank'; });   // stop loading; next word starts at the top
 
 /* ---------- build the keyboard ---------- */
 const ROWS = ['qwertyuiop', 'asdfghjkl', '>zxcvbnm<'];
