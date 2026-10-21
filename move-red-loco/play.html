@@ -20,11 +20,18 @@ document.documentElement.dataset.theme=document.documentElement.dataset.themeSet
 <main id="game">
   <p id="progressStatus" class="quiet" role="status"></p>
   <section id="selector" class="card" aria-labelledby="selectorTitle">
-    <div class="section-heading"><h2 id="selectorTitle" tabindex="-1">Choose a puzzle</h2><a id="workshop" class="button" href="./" hidden>Workshop</a></div>
+    <div class="section-heading selector-heading">
+      <h2 id="selectorTitle" tabindex="-1">Choose a puzzle</h2>
+      <div class="selector-actions">
+        <button id="play" type="button" disabled>Play</button>
+        <button id="refresh" type="button">Refresh puzzles</button>
+        <button id="resume" type="button" hidden>Return to current puzzle</button>
+        <a id="workshop" class="button" href="./" hidden>Workshop</a>
+      </div>
+    </div>
     <p>Pick a puzzle, then press Play. <span class="solved-key">✓ Solved</span> means you have solved that layout.</p>
     <p id="libraryStatus" role="status">Loading the family puzzle library…</p>
-    <div id="puzzleTiers"></div>
-    <div class="selector-actions"><button id="play" type="button" disabled>Play</button><button id="refresh" type="button">Refresh puzzles</button><button id="resume" type="button" hidden>Return to current puzzle</button></div>
+    <div id="puzzleTiers" role="region" aria-label="Puzzles by difficulty" tabindex="0"></div>
   </section>
   <section id="playing" hidden aria-labelledby="puzzleHeading">
     <div class="section-heading"><div><p id="tier" class="eyebrow"></p><h2 id="puzzleHeading" tabindex="-1"></h2></div><button id="choose" type="button">Select Another Puzzle</button></div>

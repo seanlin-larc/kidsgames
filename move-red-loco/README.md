@@ -175,6 +175,10 @@ Incomplete layouts stay visible with an explanation and a disabled Play button.
 No puzzles are hidden behind a ready-to-play flag.
 
 Select a puzzle, then Play. SL and CJ also see Workshop.
+Play, Refresh puzzles, and Return to current puzzle sit at the top of the selector, before Workshop.
+The controls wrap onto additional rows in narrow windows.
+The puzzle tiles scroll inside the card when height is limited; the heading, guidance, and controls stay visible.
+Keyboard users can focus the puzzle list and scroll it. Selecting a tile preserves the list position.
 The playing board keeps the saved exit, colours, and piece letters.
 Use mouse drag, touch drag, or select a piece and use arrow keys.
 One valid slide counts as one move, regardless of distance.

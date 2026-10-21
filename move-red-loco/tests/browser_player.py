@@ -222,4 +222,52 @@ with sync_playwright() as playwright:
         assert not errors, errors
         context.close()
     print("PASS: Workshop visibility and progress isolation for YC, JY and Guest")
+    context, page, errors = load(browser, viewport=dict(width=1200, height=600))
+    start(page)
+    page.locator("#choose").click()
+    expect(page.locator("#resume")).to_be_visible()
+    page.evaluate("""() => {
+      const records=JSON.parse(localStorage.getItem('test-puzzles'));
+      for(let n=1;n<=60;n++)records['layout-'+n]={...records['puzzle-1'],id:'layout-'+n,title:'Layout '+String(n).padStart(2,'0')};
+      localStorage.setItem('test-puzzles',JSON.stringify(records));
+    }""")
+    page.locator("#refresh").click()
+    expect(page.locator(".puzzle-choice")).to_have_count(64)
+    controls=[page.locator('#'+id).bounding_box() for id in ["play","refresh","resume","workshop"]]
+    assert max(box["y"] for box in controls)-min(box["y"] for box in controls) < 1
+    assert all(a["x"]+a["width"] <= b["x"] for a,b in zip(controls,controls[1:]))
+    assert page.locator("#puzzleTiers").evaluate("el=>el.scrollHeight>el.clientHeight")
+    heading_y=page.locator(".selector-heading").bounding_box()["y"]
+    page.locator("#puzzleTiers").hover()
+    page.mouse.wheel(0,5000)
+    page.wait_for_function("document.getElementById('puzzleTiers').scrollTop>0")
+    assert abs(page.locator(".selector-heading").bounding_box()["y"]-heading_y)<1
+    assert page.evaluate("window.scrollY===0 && document.documentElement.scrollHeight<=innerHeight+1")
+    target=page.locator('[data-puzzle-id="layout-60"]')
+    target.scroll_into_view_if_needed()
+    scroll_before=page.locator("#puzzleTiers").evaluate("el=>el.scrollTop")
+    target.click()
+    expect(page.locator('[data-puzzle-id="layout-60"]')).to_have_attribute("aria-pressed","true")
+    assert abs(page.locator("#puzzleTiers").evaluate("el=>el.scrollTop")-scroll_before)<2
+    expect(page.locator("#play")).to_be_in_viewport()
+    page.screenshot(path=str(ARTIFACTS / "selector-top-controls-desktop.png"))
+    for width,height in [(930,650),(700,500),(390,700),(844,390)]:
+        page.set_viewport_size(dict(width=width,height=height))
+        assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+        for id in ["play","refresh","resume","workshop"]:
+            expect(page.locator('#'+id)).to_be_in_viewport()
+        assert page.locator("#puzzleTiers").evaluate("el=>el.clientHeight>=86 && el.scrollHeight>el.clientHeight"), (width,height)
+    page.set_viewport_size(dict(width=390,height=700))
+    rows=[round(page.locator('#'+id).bounding_box()["y"]) for id in ["play","refresh","resume","workshop"]]
+    assert len(set(rows))>1
+    page.locator("#puzzleTiers").focus()
+    page.keyboard.press("End")
+    page.wait_for_function("document.getElementById('puzzleTiers').scrollTop>0")
+    page.screenshot(path=str(ARTIFACTS / "selector-top-controls-phone.png"))
+    page.locator("#play").click()
+    expect(page.locator("#puzzleHeading")).to_have_text("Layout 60")
+    expect(page.locator("#board")).to_be_visible()
+    assert not errors,errors
+    context.close()
+    print("PASS: selector buttons precede Workshop, wrap without overflow, and stay visible while tiles scroll; selection retains scroll; keyboard scrolling and Play work")
     browser.close()

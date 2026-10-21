@@ -60,7 +60,7 @@ async function initialize(context) {
     void syncProgress();
   }
   function renderChoices() {
-    const groups = $("puzzleTiers"); groups.replaceChildren();
+    const groups = $("puzzleTiers"), scrollTop = groups.scrollTop; groups.replaceChildren();
     for (const tier of TIERS) {
       const section = document.createElement("section"); section.className = "tier-group";
       const heading = document.createElement("h3"); heading.textContent = tier; section.append(heading);
@@ -87,6 +87,7 @@ async function initialize(context) {
       }
       section.append(grid); groups.append(section);
     }
+    groups.scrollTop = scrollTop;
     $("play").disabled = !selected || !!selected.problem;
   }
   async function loadLibrary() {
