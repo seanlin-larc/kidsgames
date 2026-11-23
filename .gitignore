@@ -9,3 +9,7 @@ admin/package-lock.json
 *-firebase-adminsdk-*.json
 admin/*.json
 !admin/package.json
+
+# Rules tests (firebase/): the emulator log and lock file stay on the computer.
+firestore-debug.log
+firebase/package-lock.json
