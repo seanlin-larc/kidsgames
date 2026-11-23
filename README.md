@@ -69,6 +69,7 @@ kidsgames/
 | word-guess  | `wg-` (data in `wg-v1`, colour theme in `wg-theme`) |
 | move-red-loco | `mrl-` (`mrl-editor-v1:<uid>` local creator drafts, `mrl-library-v1:<uid>` puzzle cache, `mrl-progress-v1:<uid>` solved layouts and pending sync, `mrl-theme` per-device Light/Dark/Auto appearance) |
 | site (shared) | `kg-` (`kg-lastPlayer`, `kg-checkout`, `kg-lock`, `kg-outbox`) |
+| KidsChinese (other repo, same site) | `kc-` (none yet). It also reads and writes `kg-lock` and `kg-lastPlayer`, so a wrong-PIN lock covers both sites |
 
 ## Publish
 
@@ -106,6 +107,17 @@ const ctx = await gate.enterGame({ bar: document.getElementById('who') });  // n
 ```
 
 - A game that adds new Firestore records needs a matching block in `firebase/firestore.rules`.
+
+### KidsChinese uses this project
+
+The KidsChinese flash cards (https://seanlin-larc.github.io/KidsChinese/, repo `seanlin-larc/KidsChinese`)
+use this Firebase project and the same accounts. YC and JY are learners. SL and CJ are parents. Guest has no access.
+
+- Its data is in the Firestore collection `chinese`. Its rules are the "KidsChinese" block in
+  `firebase/firestore.rules`. Tests: `firebase/tests/kidschinese.rules.test.mjs`.
+- **This file holds the rules for both sites.** Always publish the complete file. Run `npm test` in
+  `firebase/` first: it tests the Kids Games rules and the KidsChinese rules together.
+- One sign-in covers both sites on this device. A sign-out on one site also signs out the other.
 
 ### Reset a PIN
 

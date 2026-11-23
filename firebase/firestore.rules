@@ -2,7 +2,7 @@ rules_version = '2';
 // Firestore security rules for Kids Games (project kidsgame-7a262).
 // Copy this whole file into Firebase console > Firestore > Rules, then click Publish.
 // Family-only: only the accounts that have a players/{uid} document (SL, CJ, YC, JY, Guest)
-// can read or write.
+// can read or write. The KidsChinese site uses this project too (block near the end).
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -133,6 +133,95 @@ service cloud.firestore {
         && playedAtOk(request.resource.data)
         && request.resource.data.date == request.time;
       allow update, delete: if false;
+    }
+
+    // ---------- KidsChinese flash cards (https://seanlin-larc.github.io/KidsChinese/) ----------
+    // KidsChinese uses this project and these accounts. Learners: YC, JY. Parents: SL, CJ.
+    // Guest has no access. The role comes from players/{uid}.code, like the rest of this file.
+    // Tests: firebase/tests/kidschinese.rules.test.mjs. App: repo seanlin-larc/KidsChinese.
+    //   chinese/{code}                 { level, updatedAt, updatedBy }   parents set the level
+    //   chinese/{code}/data/summary    { stars, streak, daily, updatedAt }
+    //   chinese/{code}/data/prefs      { showPinyin, showEnglish, sessionSize, speechRate, avatar, updatedAt }
+    //   chinese/{code}/cards/{cardId}  { box, due, seen, right, updatedAt }
+    // A learner reads and writes only own progress and preferences, and cannot change the level.
+    // A parent reads both learners, sets levels, changes preferences, and resets progress
+    // (deletes cards and the summary). A parent does not write card answers.
+    function kcLearnerCode(code) {
+      return code in ['YC', 'JY'];
+    }
+    function kcParent() {
+      return isFamily() && playerCode() in ['SL', 'CJ'];
+    }
+    function kcSelf(code) {
+      return kcLearnerCode(code) && isFamily() && playerCode() == code;
+    }
+    function kcCanRead(code) {
+      return kcLearnerCode(code) && (kcParent() || kcSelf(code));
+    }
+    function kcDateOrNull(d) {
+      return d == null || (d is string && d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
+    }
+    function kcCount(n, max) {
+      return n is int && n >= 0 && n <= max;
+    }
+    function kcLevelOk(d) {
+      return d.keys().hasOnly(['level', 'updatedAt', 'updatedBy'])
+        && d.keys().hasAll(['level', 'updatedAt', 'updatedBy'])
+        && d.level in [1, 2, 3]
+        && d.updatedAt == request.time
+        && d.updatedBy == playerCode();
+    }
+    function kcCardOk(d) {
+      return d.keys().hasOnly(['box', 'due', 'seen', 'right', 'updatedAt'])
+        && d.keys().hasAll(['box', 'due', 'seen', 'right', 'updatedAt'])
+        && kcCount(d.box, 5)
+        && kcDateOrNull(d.due)
+        && kcCount(d.seen, 100000)
+        && kcCount(d.right, 100000)
+        && d.right <= d.seen
+        && d.updatedAt == request.time;
+    }
+    function kcSummaryOk(d) {
+      return d.keys().hasOnly(['stars', 'streak', 'daily', 'updatedAt'])
+        && d.keys().hasAll(['stars', 'streak', 'daily', 'updatedAt'])
+        && kcCount(d.stars, 10000000)
+        && d.streak is map && d.streak.keys().hasOnly(['count', 'last']) && d.streak.keys().hasAll(['count', 'last'])
+        && kcCount(d.streak.count, 100000) && kcDateOrNull(d.streak.last)
+        && d.daily is map && d.daily.keys().hasOnly(['date', 'count']) && d.daily.keys().hasAll(['date', 'count'])
+        && kcCount(d.daily.count, 100000) && kcDateOrNull(d.daily.date)
+        && d.updatedAt == request.time;
+    }
+    function kcPrefsOk(d) {
+      return d.keys().hasOnly(['showPinyin', 'showEnglish', 'sessionSize', 'speechRate', 'avatar', 'updatedAt'])
+        && d.keys().hasAll(['showPinyin', 'showEnglish', 'sessionSize', 'speechRate', 'avatar', 'updatedAt'])
+        && d.showPinyin is bool
+        && d.showEnglish is bool
+        && d.sessionSize in [5, 10, 15, 20]
+        && d.speechRate is number && d.speechRate >= 0.5 && d.speechRate <= 1.5
+        && d.avatar is string && d.avatar.size() <= 16
+        && d.updatedAt == request.time;
+    }
+    match /chinese/{code} {
+      allow read: if kcCanRead(code);
+      allow create, update: if kcLearnerCode(code) && kcParent() && kcLevelOk(request.resource.data);
+      allow delete: if false;
+
+      match /cards/{cardId} {
+        allow read: if kcCanRead(code);
+        allow create, update: if kcSelf(code) && cardId.size() <= 64 && kcCardOk(request.resource.data);
+        allow delete: if kcLearnerCode(code) && kcParent();
+      }
+      match /data/summary {
+        allow read: if kcCanRead(code);
+        allow create, update: if kcSelf(code) && kcSummaryOk(request.resource.data);
+        allow delete: if kcLearnerCode(code) && kcParent();
+      }
+      match /data/prefs {
+        allow read: if kcCanRead(code);
+        allow create, update: if (kcSelf(code) || (kcLearnerCode(code) && kcParent()))
+          && kcPrefsOk(request.resource.data);
+        allow delete: if false;
+      }
     }
 
     // Everything else stays locked.
