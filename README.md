@@ -111,7 +111,9 @@ const ctx = await gate.enterGame({ bar: document.getElementById('who') });  // n
 ### KidsChinese uses this project
 
 The KidsChinese flash cards (https://seanlin-larc.github.io/KidsChinese/, repo `seanlin-larc/KidsChinese`)
-use this Firebase project and the same accounts. YC and JY are learners. SL and CJ are parents. Guest has no access.
+use this Firebase project and the same accounts. YC and JY are learners. SL, CJ and AMA (嬤, grandma) are parents;
+parents also study with their own progress. Guest has no access. AMA is a KidsChinese account only: it has a
+`players/{uid}` document, but it is not on the Kids Games sign-in page.
 
 - Its data is in the Firestore collection `chinese`. Its rules are the "KidsChinese" block in
   `firebase/firestore.rules`. Tests: `firebase/tests/kidschinese.rules.test.mjs`.

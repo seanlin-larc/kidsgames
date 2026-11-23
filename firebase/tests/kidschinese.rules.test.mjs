@@ -8,11 +8,11 @@ import { collection, deleteDoc, doc, getDoc, getDocs, serverTimestamp, setDoc, u
 
 let env;
 
-// uid-<who>. players/{uid} documents are made in beforeEach for YC, JY, SL, CJ, Guest.
+// uid-<who>. players/{uid} documents are made in beforeEach for YC, JY, SL, CJ, AMA, Guest.
 // OTHER has no players document. FAKE has YC's email, but its players document says JY.
 const ACCOUNTS = {
   YC: 'yc@kidsgames.invalid', JY: 'jy@kidsgames.invalid', SL: 'sl@kidsgames.invalid',
-  CJ: 'cj@kidsgames.invalid', Guest: 'guest@kidsgames.invalid', OTHER: 'other@example.com', FAKE: 'yc@kidsgames.invalid',
+  CJ: 'cj@kidsgames.invalid', AMA: 'ama@kidsgames.invalid', Guest: 'guest@kidsgames.invalid', OTHER: 'other@example.com', FAKE: 'yc@kidsgames.invalid',
 };
 
 // A Firestore client signed in as this account (null = signed out).
@@ -46,7 +46,7 @@ beforeEach(async () => {
   // Some data for YC and JY, written with the rules turned off.
   await env.withSecurityRulesDisabled(async (ctx) => {
     const d = ctx.firestore();
-    for (const code of ['YC', 'JY', 'SL', 'CJ', 'Guest']) await setDoc(doc(d, 'players', 'uid-' + code), { code });
+    for (const code of ['YC', 'JY', 'SL', 'CJ', 'AMA', 'Guest']) await setDoc(doc(d, 'players', 'uid-' + code), { code });
     await setDoc(doc(d, 'players', 'uid-FAKE'), { code: 'JY' });
     for (const code of ['YC', 'JY']) {
       await setDoc(levelRef(d, code), { level: 1, updatedAt: Timestamp.now(), updatedBy: 'SL' });
@@ -73,7 +73,7 @@ test('KidsChinese: a learner reads own data only', async () => {
 });
 
 test('KidsChinese: parents read every learner; outsiders read nothing', async () => {
-  for (const p of ['SL', 'CJ']) {
+  for (const p of ['SL', 'CJ', 'AMA']) {
     for (const code of ['YC', 'JY']) {
       await assertSucceeds(getDoc(levelRef(db(p), code)));
       await assertSucceeds(getDoc(sumRef(db(p), code)));
@@ -106,18 +106,48 @@ test('KidsChinese: a learner cannot write the other learner, and parents cannot 
   await assertFails(setDoc(cardRef(db('YC'), 'JY'), card()));
   await assertFails(setDoc(sumRef(db('YC'), 'JY'), summary()));
   await assertFails(setDoc(prefsRef(db('JY'), 'YC'), prefs()));
-  for (const p of ['SL', 'CJ']) {
+  for (const p of ['SL', 'CJ', 'AMA']) {
     await assertFails(setDoc(cardRef(db(p), 'YC'), card()));
     await assertFails(setDoc(sumRef(db(p), 'YC'), summary()));
   }
   for (const who of [null, 'OTHER', 'Guest']) {
     await assertFails(setDoc(cardRef(db(who), 'YC'), card()));
   }
-  // Only YC and JY are learners; Guest is not.
-  await assertFails(setDoc(cardRef(db('SL'), 'SL'), card()));
+  // Guest does not study.
   await assertFails(setDoc(cardRef(db('Guest'), 'Guest'), card()));
   await assertFails(setDoc(prefsRef(db('Guest'), 'YC'), prefs()));
-  await assertFails(setDoc(levelRef(db('SL'), 'SL'), level('SL')));
+  await assertFails(setDoc(levelRef(db('Guest'), 'Guest'), level('Guest')));
+});
+
+test('KidsChinese: a parent studies too (own data), and does not touch another parent', async () => {
+  for (const p of ['SL', 'CJ', 'AMA']) {
+    const d = db(p);
+    const b = writeBatch(d);
+    b.set(cardRef(d, p, 'food:蘋果'), card());
+    b.set(sumRef(d, p), summary());
+    await assertSucceeds(b.commit());
+    await assertSucceeds(setDoc(prefsRef(d, p), prefs()));
+    await assertSucceeds(setDoc(levelRef(d, p), level(p, { level: 4 })));
+    await assertSucceeds(getDoc(levelRef(d, p)));
+    await assertSucceeds(getDocs(collection(d, 'chinese', p, 'cards')));
+    // Own reset.
+    await assertSucceeds(deleteDoc(cardRef(d, p, 'food:蘋果')));
+    await assertSucceeds(deleteDoc(sumRef(d, p)));
+  }
+  // AMA's data: SL and CJ cannot read or change it; the children cannot either.
+  await assertSucceeds(setDoc(sumRef(db('AMA'), 'AMA'), summary()));
+  for (const who of ['SL', 'CJ', 'YC', 'JY', 'Guest']) {
+    await assertFails(getDoc(sumRef(db(who), 'AMA')));
+    await assertFails(getDocs(collection(db(who), 'chinese', 'AMA', 'cards')));
+    await assertFails(setDoc(levelRef(db(who), 'AMA'), level(who)));
+    await assertFails(deleteDoc(sumRef(db(who), 'AMA')));
+    await assertFails(setDoc(prefsRef(db(who), 'AMA'), prefs()));
+  }
+  // A child cannot write a parent's progress.
+  await assertFails(setDoc(cardRef(db('YC'), 'SL'), card()));
+  // Codes that are not KidsChinese accounts have no data.
+  await assertFails(setDoc(levelRef(db('SL'), 'Guest'), level('SL')));
+  await assertFails(setDoc(sumRef(db('SL'), 'Guest'), summary()));
 });
 
 test('KidsChinese: card data must have the right shape', async () => {
@@ -151,13 +181,15 @@ test('KidsChinese: only a parent sets the level, with a valid value and own code
   await assertSucceeds(setDoc(levelRef(db('SL'), 'YC'), level('SL', { level: 3 })));
   await assertSucceeds(setDoc(levelRef(db('CJ'), 'JY'), level('CJ', { level: 1 })));
   await assertSucceeds(setDoc(levelRef(db('CJ'), 'JY'), level('CJ', { level: 2 })));
+  await assertSucceeds(setDoc(levelRef(db('SL'), 'JY'), level('SL', { level: 4 })));
+  await assertSucceeds(setDoc(levelRef(db('AMA'), 'YC'), level('AMA', { level: 2 })));
   // A learner cannot change any level, own or other.
   await assertFails(setDoc(levelRef(db('YC'), 'YC'), level('SL', { level: 3 })));
   await assertFails(updateDoc(levelRef(db('JY'), 'JY'), { level: 3 }));
   await assertFails(setDoc(levelRef(db('JY'), 'YC'), level('SL')));
   await assertFails(setDoc(levelRef(db('Guest'), 'YC'), level('Guest')));
   // Bad values.
-  for (const bad of [{ level: 0 }, { level: 4 }, { level: '2' }, { updatedBy: 'CJ' }, { updatedAt: Timestamp.fromMillis(0) }, { extra: 1 }]) {
+  for (const bad of [{ level: 0 }, { level: 5 }, { level: '2' }, { updatedBy: 'CJ' }, { updatedAt: Timestamp.fromMillis(0) }, { extra: 1 }]) {
     await assertFails(setDoc(levelRef(db('SL'), 'YC'), level('SL', bad)));
   }
   // Nobody deletes the level document.
@@ -185,6 +217,7 @@ test('KidsChinese: only a parent resets progress (deletes cards and summary)', a
 test('KidsChinese: preferences: the learner or a parent, with valid values', async () => {
   await assertSucceeds(setDoc(prefsRef(db('YC'), 'YC'), prefs({ avatar: '🦊', sessionSize: 15 })));
   await assertSucceeds(setDoc(prefsRef(db('SL'), 'JY'), prefs({ showEnglish: false })));
+  await assertSucceeds(setDoc(prefsRef(db('AMA'), 'YC'), prefs({ sessionSize: 5 })));
   for (const bad of [
     { sessionSize: 7 }, { speechRate: 3 }, { speechRate: '0.8' }, { showPinyin: 'yes' },
     { avatar: 'x'.repeat(17) }, { level: 3 }, { updatedAt: Timestamp.fromMillis(0) },

@@ -1,7 +1,7 @@
 rules_version = '2';
 // Firestore security rules for Kids Games (project kidsgame-7a262).
 // Copy this whole file into Firebase console > Firestore > Rules, then click Publish.
-// Family-only: only the accounts that have a players/{uid} document (SL, CJ, YC, JY, Guest)
+// Family-only: only the accounts that have a players/{uid} document (SL, CJ, YC, JY, Guest, AMA)
 // can read or write. The KidsChinese site uses this project too (block near the end).
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -136,27 +136,36 @@ service cloud.firestore {
     }
 
     // ---------- KidsChinese flash cards (https://seanlin-larc.github.io/KidsChinese/) ----------
-    // KidsChinese uses this project and these accounts. Learners: YC, JY. Parents: SL, CJ.
+    // KidsChinese uses this project and these accounts. Children: YC, JY. Parents: SL, CJ, AMA (嬤).
     // Guest has no access. The role comes from players/{uid}.code, like the rest of this file.
     // Tests: firebase/tests/kidschinese.rules.test.mjs. App: repo seanlin-larc/KidsChinese.
-    //   chinese/{code}                 { level, updatedAt, updatedBy }   parents set the level
+    //   chinese/{code}                 { level, updatedAt, updatedBy }   parents set the level (1–4)
     //   chinese/{code}/data/summary    { stars, streak, daily, updatedAt }
     //   chinese/{code}/data/prefs      { showPinyin, showEnglish, sessionSize, speechRate, avatar, updatedAt }
     //   chinese/{code}/cards/{cardId}  { box, due, seen, right, updatedAt }
-    // A learner reads and writes only own progress and preferences, and cannot change the level.
-    // A parent reads both learners, sets levels, changes preferences, and resets progress
-    // (deletes cards and the summary). A parent does not write card answers.
+    // Everyone studies: each account reads and writes its own progress and preferences.
+    // A child cannot change the level. A parent reads both children, sets their levels, changes
+    // their preferences, and resets their progress (deletes cards and the summary).
+    // A parent also sets and resets their own level and progress (a test player).
+    // A parent does not read another parent's data, and does not write card answers for others.
     function kcLearnerCode(code) {
       return code in ['YC', 'JY'];
     }
+    function kcParentCode(code) {
+      return code in ['SL', 'CJ', 'AMA'];
+    }
     function kcParent() {
-      return isFamily() && playerCode() in ['SL', 'CJ'];
+      return isFamily() && kcParentCode(playerCode());
     }
     function kcSelf(code) {
-      return kcLearnerCode(code) && isFamily() && playerCode() == code;
+      return (kcLearnerCode(code) || kcParentCode(code)) && isFamily() && playerCode() == code;
+    }
+    // A parent manages a child, or themself.
+    function kcManages(code) {
+      return kcParent() && (kcLearnerCode(code) || playerCode() == code);
     }
     function kcCanRead(code) {
-      return kcLearnerCode(code) && (kcParent() || kcSelf(code));
+      return kcSelf(code) || (kcLearnerCode(code) && kcParent());
     }
     function kcDateOrNull(d) {
       return d == null || (d is string && d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
@@ -167,7 +176,7 @@ service cloud.firestore {
     function kcLevelOk(d) {
       return d.keys().hasOnly(['level', 'updatedAt', 'updatedBy'])
         && d.keys().hasAll(['level', 'updatedAt', 'updatedBy'])
-        && d.level in [1, 2, 3]
+        && d.level in [1, 2, 3, 4]
         && d.updatedAt == request.time
         && d.updatedBy == playerCode();
     }
@@ -203,22 +212,22 @@ service cloud.firestore {
     }
     match /chinese/{code} {
       allow read: if kcCanRead(code);
-      allow create, update: if kcLearnerCode(code) && kcParent() && kcLevelOk(request.resource.data);
+      allow create, update: if kcManages(code) && kcLevelOk(request.resource.data);
       allow delete: if false;
 
       match /cards/{cardId} {
         allow read: if kcCanRead(code);
         allow create, update: if kcSelf(code) && cardId.size() <= 64 && kcCardOk(request.resource.data);
-        allow delete: if kcLearnerCode(code) && kcParent();
+        allow delete: if kcManages(code);
       }
       match /data/summary {
         allow read: if kcCanRead(code);
         allow create, update: if kcSelf(code) && kcSummaryOk(request.resource.data);
-        allow delete: if kcLearnerCode(code) && kcParent();
+        allow delete: if kcManages(code);
       }
       match /data/prefs {
         allow read: if kcCanRead(code);
-        allow create, update: if (kcSelf(code) || (kcLearnerCode(code) && kcParent()))
+        allow create, update: if (kcSelf(code) || kcManages(code))
           && kcPrefsOk(request.resource.data);
         allow delete: if false;
       }
