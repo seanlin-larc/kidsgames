@@ -135,10 +135,10 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ---------- KidsChinese flash cards (https://seanlin-larc.github.io/KidsChinese/) ----------
+    // ---------- KidsChinese flash cards (https://seanlin-larc.github.io/kidsChinese/) ----------
     // KidsChinese uses this project and these accounts. Children: YC, JY. Parents: SL, CJ, AMA (嬤).
     // Guest has no access. The role comes from players/{uid}.code, like the rest of this file.
-    // Tests: firebase/tests/kidschinese.rules.test.mjs. App: repo seanlin-larc/KidsChinese.
+    // Tests: firebase/tests/kidschinese.rules.test.mjs. App: repo seanlin-larc/kidsChinese.
     //   chinese/{code}                 { level, updatedAt, updatedBy }   parents set the level (1–4)
     //   chinese/{code}/data/summary    { stars, streak, daily, updatedAt }
     //   chinese/{code}/data/prefs      { showPinyin, showEnglish, sessionSize, speechRate, avatar, updatedAt }

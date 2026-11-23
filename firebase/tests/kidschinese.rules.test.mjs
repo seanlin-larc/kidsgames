@@ -1,5 +1,5 @@
 // Tests for the KidsChinese block of firebase/firestore.rules (collection "chinese").
-// KidsChinese (repo seanlin-larc/KidsChinese) uses this Firebase project and these accounts.
+// KidsChinese (repo seanlin-larc/kidsChinese) uses this Firebase project and these accounts.
 // Run in the firebase/ folder: npm install, then npm test (needs Java 11 or later).
 import { readFile } from 'node:fs/promises';
 import { after, before, beforeEach, test } from 'node:test';
